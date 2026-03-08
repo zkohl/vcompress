@@ -14,13 +14,12 @@ struct RealExportSessionFactory: ExportSessionFactory {
         switch quality {
         case .standard:
             try await exportWithSession(source: source, destination: destination, fileType: fileType)
-        case .high, .max:
-            let compressionQuality: Double = quality == .max ? 0.75 : 0.65
+        case .high, .veryHigh, .max:
             try await exportWithWriter(
                 source: source,
                 destination: destination,
                 fileType: fileType,
-                compressionQuality: compressionQuality
+                compressionQuality: quality.compressionQuality!
             )
         }
     }
@@ -50,7 +49,7 @@ struct RealExportSessionFactory: ExportSessionFactory {
         }
     }
 
-    // MARK: - AVAssetReader/Writer path (high/max quality)
+    // MARK: - AVAssetReader/Writer path (high/very-high/max quality)
 
     private func exportWithWriter(
         source: URL,

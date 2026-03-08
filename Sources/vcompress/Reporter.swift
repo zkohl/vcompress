@@ -22,8 +22,10 @@ public struct Reporter {
             presetLabel = "HEVC Highest Quality (standard)"
         case .high:
             presetLabel = "HEVC Quality 0.65 (high)"
+        case .veryHigh:
+            presetLabel = "HEVC Quality 0.75 (very-high)"
         case .max:
-            presetLabel = "HEVC Quality 0.75 (max)"
+            presetLabel = "HEVC Quality 0.85 (max)"
         }
 
         var lines: [String] = []
@@ -134,7 +136,7 @@ public struct Reporter {
     // MARK: - Estimation
 
     /// Estimates the output size range for a given input size and quality tier.
-    /// Standard: 5%-15%, High: 5%-20%, Max: 15%-35%.
+    /// Standard: 5%-15%, High: 5%-20%, Very-High: 10%-30%, Max: 20%-45%.
     public static func estimateOutput(inputSize: Int64, quality: Quality) -> (low: Int64, high: Int64) {
         let (lowFraction, highFraction): (Double, Double)
         switch quality {
@@ -142,8 +144,10 @@ public struct Reporter {
             (lowFraction, highFraction) = (0.05, 0.15)
         case .high:
             (lowFraction, highFraction) = (0.05, 0.20)
+        case .veryHigh:
+            (lowFraction, highFraction) = (0.10, 0.30)
         case .max:
-            (lowFraction, highFraction) = (0.15, 0.35)
+            (lowFraction, highFraction) = (0.20, 0.45)
         }
         let low = Int64(Double(inputSize) * lowFraction)
         let high = Int64(Double(inputSize) * highFraction)
