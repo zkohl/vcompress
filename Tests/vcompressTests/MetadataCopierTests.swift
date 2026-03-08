@@ -192,11 +192,32 @@ final class MetadataCopierTests: XCTestCase {
         let json = try JSONSerialization.jsonObject(with: xattrData) as! [String: Any]
         XCTAssertEqual(json["tool"] as? String, "vcompress")
         XCTAssertEqual(json["preset"] as? String, "hevc_max")
-        XCTAssertEqual(json["quality"] as? String, "0.75")
+        XCTAssertEqual(json["quality"] as? String, "0.85")
         XCTAssertEqual(json["originalSize"] as? Int, 1_000_000)
         XCTAssertEqual(json["compressedSize"] as? Int, 250_000)
         XCTAssertEqual(json["ratio"] as? Double, 0.25)
         XCTAssertEqual(json["compressedAt"] as? String, "2023-11-14T22:13:20Z")
+    }
+
+    func test_stampVcompress_veryHighQuality() throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/dst.mov")
+
+        let copier = MetadataCopier(fs: fs, clock: MockClock())
+        try copier.stampVcompress(
+            atPath: "/dst.mov",
+            quality: .veryHigh,
+            preset: "hevc_very_high",
+            originalSize: 1_000_000,
+            compressedSize: 100_000
+        )
+
+        let xattrName = "com.apple.metadata:_kMDItemUserTags"
+        let tagData = try fs.getExtendedAttribute(xattrName, atPath: "/dst.mov")
+        let tags = try PropertyListSerialization.propertyList(
+            from: tagData, options: [], format: nil
+        ) as! [String]
+        XCTAssertEqual(tags, ["vcompress:veryHigh:0.75\n0"])
     }
 
     func test_stampVcompress_standardQuality() throws {
