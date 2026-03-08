@@ -6,9 +6,13 @@ import Foundation
 /// continues without throwing.
 struct MetadataCopier {
     let fs: FileSystemProvider
+    let clock: Clock
 
     /// The xattr key used by macOS Finder for user tags.
     private static let finderTagsXattr = "com.apple.metadata:_kMDItemUserTags"
+
+    /// The xattr key for vcompress encoding metadata.
+    static let vcompressXattr = "com.vcompress.metadata"
 
     /// Copy creation date, modification date, and Finder tags from source to dest.
     ///
@@ -59,6 +63,80 @@ struct MetadataCopier {
         } catch {
             throw error
         }
+    }
+
+    /// Stamp the output file with vcompress encoding metadata.
+    ///
+    /// Adds a Finder tag (e.g. `vcompress:high:0.65`) and a custom xattr
+    /// with full encoding details as JSON.
+    func stampVcompress(
+        atPath path: String,
+        quality: Quality,
+        preset: String,
+        originalSize: Int64,
+        compressedSize: Int64
+    ) throws {
+        let qualityValue: String
+        switch quality {
+        case .standard: qualityValue = "preset"
+        case .high: qualityValue = "0.65"
+        case .max: qualityValue = "0.75"
+        }
+
+        // --- Finder tag ---
+        let tagName = "vcompress:\(quality.rawValue):\(qualityValue)"
+        try addFinderTag(tagName, atPath: path)
+
+        // --- Custom xattr (JSON) ---
+        let ratio = originalSize > 0
+            ? Double(compressedSize) / Double(originalSize)
+            : 0.0
+        let roundedRatio = (ratio * 100).rounded() / 100
+
+        let formatter = ISO8601DateFormatter()
+        let metadata: [String: Any] = [
+            "tool": "vcompress",
+            "preset": preset,
+            "quality": qualityValue,
+            "originalSize": originalSize,
+            "compressedSize": compressedSize,
+            "ratio": NSDecimalNumber(value: roundedRatio),
+            "compressedAt": formatter.string(from: clock.now()),
+        ]
+        let jsonData = try JSONSerialization.data(
+            withJSONObject: metadata,
+            options: [.sortedKeys]
+        )
+        try fs.setExtendedAttribute(Self.vcompressXattr, data: jsonData, atPath: path)
+    }
+
+    /// Add a Finder tag to a file, preserving any existing tags.
+    private func addFinderTag(_ tag: String, atPath path: String) throws {
+        var tags: [String] = []
+
+        // Read existing tags if present.
+        do {
+            let existingData = try fs.getExtendedAttribute(
+                Self.finderTagsXattr, atPath: path
+            )
+            if let plist = try PropertyListSerialization.propertyList(
+                from: existingData, options: [], format: nil
+            ) as? [String] {
+                tags = plist
+            }
+        } catch let error as NSError
+            where error.domain == NSPOSIXErrorDomain && error.code == Int(ENOATTR)
+        {
+            // No existing tags — start fresh.
+        }
+
+        // Append the new tag (with color code 0 = no color).
+        tags.append("\(tag)\n0")
+
+        let plistData = try PropertyListSerialization.data(
+            fromPropertyList: tags, format: .binary, options: 0
+        )
+        try fs.setExtendedAttribute(Self.finderTagsXattr, data: plistData, atPath: path)
     }
 
     /// Log a warning to stderr. In a full build this could route through a
