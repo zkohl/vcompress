@@ -50,6 +50,11 @@ struct Encoder {
                 throw EncodingError.outputValidation("Output file is zero bytes")
             }
 
+            // Remove existing destination if present (e.g. --fresh re-encode)
+            if fs.fileExists(atPath: destURL.path) {
+                try fs.removeItem(at: destURL)
+            }
+
             // Move temp to final path (before playability check, since AVFoundation
             // needs a recognized file extension to determine playability)
             try fs.moveItem(at: tmpURL, to: destURL)
