@@ -280,25 +280,38 @@ final class ScannerTests: XCTestCase {
     // MARK: - test_skipsSymlinks
 
     func test_skipsSymlinks() async throws {
-        let fs = MockFileSystem()
-        fs.addFile(
-            path: "/source/link.mp4",
-            size: 100_000_000,
-            attributes: [.type: FileAttributeType.typeSymbolicLink]
-        )
+        // Use real filesystem to test symlink detection via URL resource values
+        let fm = FileManager.default
+        let base = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vcompress-symlink-test-\(UUID().uuidString)")
+        let sourceDir = base.appendingPathComponent("source")
+        let destDir = base.appendingPathComponent("dest")
+        let realFile = sourceDir.appendingPathComponent("real.mp4")
+        let linkFile = sourceDir.appendingPathComponent("link.mp4")
 
+        try fm.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: base) }
+
+        // Create a real file and a symlink to it
+        try Data(count: 1024).write(to: realFile)
+        try fm.createSymbolicLink(at: linkFile, withDestinationURL: realFile)
+
+        let fs = RealFileSystem()
         let typeID = MockFileTypeIdentifier()
-        typeID.movieFiles = ["link.mp4"]
+        typeID.movieFiles = ["real.mp4", "link.mp4"]
 
         let inspector = MockAssetInspector()
+        // Return empty codecs so files are skipped as noVideoTrack (not pending)
+        // The key assertion is that the symlink is skipped before even being counted
 
         let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
         let result = try await scanner.scan(
-            source: sourceURL, dest: destURL, config: makeConfig()
+            source: sourceDir, dest: destDir, config: makeConfig()
         )
 
-        XCTAssertEqual(result.pending.count, 0)
-        XCTAssertEqual(result.totalScanned, 0)
+        // Only the real file should be scanned, the symlink should be skipped entirely
+        XCTAssertEqual(result.totalScanned, 1, "Symlink should not be counted in totalScanned")
     }
 
     // MARK: - test_freshFlag_ignoresCompletedState

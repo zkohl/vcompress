@@ -52,11 +52,12 @@ public struct Scanner {
             }
 
             // Skip symlinks -- do not count them.
-            let attrs = try? fs.attributesOfItem(atPath: url.path)
-            let fileType = attrs?[.type] as? FileAttributeType
-            if fileType == .typeSymbolicLink {
+            let resourceValues = try? url.resourceValues(forKeys: [.isSymbolicLinkKey])
+            if resourceValues?.isSymbolicLink == true {
                 continue
             }
+
+            let attrs = try? fs.attributesOfItem(atPath: url.path)
 
             totalScanned += 1
 
