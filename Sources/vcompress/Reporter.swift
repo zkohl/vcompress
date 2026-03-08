@@ -44,6 +44,7 @@ public struct Reporter {
             (.alreadyHEVC, "Already HEVC:"),
             (.alreadyDone, "Already done:"),
             (.tooSmall, "Below min-size:"),
+            (.alreadyEfficient, "Low bitrate:"),
             (.noVideoTrack, "No video track:"),
             (.notVideo, "Not video:"),
             (.unsupportedContainer, "Unsupported:"),

@@ -72,6 +72,10 @@ public protocol AssetInspector {
     /// An empty array means "no video tracks" (audio-only container).
     func videoTrackCodecs(forFileAt url: URL) async throws -> [CMVideoCodecType]
 
+    /// Returns metadata about the first video track (resolution, fps, bitrate, codec).
+    /// Returns nil if no video track exists.
+    func videoTrackInfo(forFileAt url: URL) async throws -> VideoTrackInfo?
+
     /// Returns whether the asset is playable (used for output validation).
     func isPlayable(at url: URL) async throws -> Bool
 }

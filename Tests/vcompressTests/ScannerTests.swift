@@ -347,6 +347,132 @@ final class ScannerTests: XCTestCase {
             "With --fresh, nothing should be skipped as alreadyDone")
     }
 
+    // MARK: - test_skipsAlreadyEfficient
+
+    func test_skipsAlreadyEfficient() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/efficient.mp4", size: 100_000_000)
+
+        let typeID = MockFileTypeIdentifier()
+        typeID.movieFiles = ["efficient.mp4"]
+
+        let inspector = MockAssetInspector()
+        inspector.codecs["/source/efficient.mp4"] = [kCMVideoCodecType_H264]
+        // 1080p 30fps, 17 Mbps -> bpp=0.27, 122 MB/min
+        inspector.trackInfo["/source/efficient.mp4"] = VideoTrackInfo(
+            width: 1920, height: 1080, frameRate: 30.0,
+            estimatedBitrate: 17_000_000, codec: kCMVideoCodecType_H264
+        )
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: makeConfig()
+        )
+
+        XCTAssertEqual(result.pending.count, 0)
+        XCTAssertEqual(result.skipCounts[.alreadyEfficient], 1)
+    }
+
+    // MARK: - test_encodesHighBpp
+
+    func test_encodesHighBpp() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/high_bpp.mp4", size: 500_000_000)
+
+        let typeID = MockFileTypeIdentifier()
+        typeID.movieFiles = ["high_bpp.mp4"]
+
+        let inspector = MockAssetInspector()
+        inspector.codecs["/source/high_bpp.mp4"] = [kCMVideoCodecType_H264]
+        // 1080p 30fps, 87 Mbps -> bpp=1.40, 625 MB/min
+        inspector.trackInfo["/source/high_bpp.mp4"] = VideoTrackInfo(
+            width: 1920, height: 1080, frameRate: 30.0,
+            estimatedBitrate: 87_000_000, codec: kCMVideoCodecType_H264
+        )
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: makeConfig()
+        )
+
+        XCTAssertEqual(result.pending.count, 1)
+        XCTAssertNil(result.skipCounts[.alreadyEfficient])
+    }
+
+    // MARK: - test_encodesLargeAbsoluteSize
+
+    func test_encodesLargeAbsoluteSize() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/large_4k.mp4", size: 1_000_000_000)
+
+        let typeID = MockFileTypeIdentifier()
+        typeID.movieFiles = ["large_4k.mp4"]
+
+        let inspector = MockAssetInspector()
+        inspector.codecs["/source/large_4k.mp4"] = [kCMVideoCodecType_H264]
+        // 4K 30fps, 93 Mbps -> bpp=0.37, 663 MB/min (low bpp but high MB/min)
+        inspector.trackInfo["/source/large_4k.mp4"] = VideoTrackInfo(
+            width: 3840, height: 2160, frameRate: 30.0,
+            estimatedBitrate: 93_000_000, codec: kCMVideoCodecType_H264
+        )
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: makeConfig()
+        )
+
+        XCTAssertEqual(result.pending.count, 1)
+        XCTAssertNil(result.skipCounts[.alreadyEfficient])
+    }
+
+    // MARK: - test_encodesProResRegardless
+
+    func test_encodesProResRegardless() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/prores.mov", size: 2_000_000_000)
+
+        let typeID = MockFileTypeIdentifier()
+        typeID.movieFiles = ["prores.mov"]
+
+        let inspector = MockAssetInspector()
+        inspector.codecs["/source/prores.mov"] = [kCMVideoCodecType_AppleProRes422]
+        // Even with low bpp and low MB/min, ProRes should still encode
+        inspector.trackInfo["/source/prores.mov"] = VideoTrackInfo(
+            width: 1920, height: 1080, frameRate: 30.0,
+            estimatedBitrate: 10_000_000, codec: kCMVideoCodecType_AppleProRes422
+        )
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: makeConfig()
+        )
+
+        XCTAssertEqual(result.pending.count, 1)
+        XCTAssertNil(result.skipCounts[.alreadyEfficient])
+    }
+
+    // MARK: - test_encodesWhenTrackInfoUnavailable
+
+    func test_encodesWhenTrackInfoUnavailable() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/noinfo.mp4", size: 200_000_000)
+
+        let typeID = MockFileTypeIdentifier()
+        typeID.movieFiles = ["noinfo.mp4"]
+
+        let inspector = MockAssetInspector()
+        inspector.codecs["/source/noinfo.mp4"] = [kCMVideoCodecType_H264]
+        // No trackInfo set -> returns nil -> conservative: encode
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: makeConfig()
+        )
+
+        XCTAssertEqual(result.pending.count, 1)
+        XCTAssertNil(result.skipCounts[.alreadyEfficient])
+    }
+
     // MARK: - test_multipleFiles_correctCounts
 
     func test_multipleFiles_correctCounts() async throws {
@@ -377,6 +503,11 @@ final class ScannerTests: XCTestCase {
         inspector.codecs["/source/hevc.mp4"] = [kCMVideoCodecType_HEVC]
         inspector.codecs["/source/audio.mov"] = []
         inspector.codecs["/source/tiny.mp4"] = [kCMVideoCodecType_H264]
+        // Give h264.mp4 high bitrate so it stays pending (not skipped as efficient)
+        inspector.trackInfo["/source/h264.mp4"] = VideoTrackInfo(
+            width: 1920, height: 1080, frameRate: 30.0,
+            estimatedBitrate: 87_000_000, codec: kCMVideoCodecType_H264
+        )
 
         let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
         let config = makeConfig(minSize: 10_000) // 10 KB min

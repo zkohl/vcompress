@@ -183,6 +183,15 @@ struct VCompress: AsyncParsableCommand {
         let plan = reporter.formatPlan(scanResult, config: config)
         print(plan)
 
+        // Verbose: print per-file efficiency skip details
+        if verbose {
+            for warning in scanResult.warnings {
+                if case .efficientlyCompressed(let path, let bpp, let mbPerMin) = warning {
+                    fputs("  skip: \(path) — already efficient (\(String(format: "%.2f", bpp)) bpp, \(Int(mbPerMin)) MB/min)\n", stderr)
+                }
+            }
+        }
+
         // Check disk space and warn
         if let availableSpace = try? fs.availableSpace(atPath: destURL.path) {
             let estimate = Reporter.estimateOutput(
