@@ -37,7 +37,7 @@ actor ResultsWriter {
             var entry = ResultsFileEntry()
             entry.path = file.relativePath
             entry.sourcePath = file.sourcePath
-            entry.size = file.fileSize
+            entry.sourceSize = file.fileSize
             entry.finderTags = file.finderTags
 
             switch file.classification {
@@ -49,14 +49,14 @@ actor ResultsWriter {
             }
 
             if let info = file.trackInfo {
-                entry.codec = Reporter.formatCodec(info.codec)
-                entry.width = info.width
-                entry.height = info.height
-                entry.frameRate = round(info.frameRate * 10) / 10
-                entry.bitrateMbps = round(info.estimatedBitrate / 1_000_000 * 10) / 10
+                entry.sourceCodec = Reporter.formatCodec(info.codec)
+                entry.sourceWidth = info.width
+                entry.sourceHeight = info.height
+                entry.sourceFrameRate = round(info.frameRate * 10) / 10
+                entry.sourceBitrateMbps = round(info.estimatedBitrate / 1_000_000 * 10) / 10
                 if info.width > 0, info.height > 0, info.frameRate > 0, info.estimatedBitrate > 0 {
                     let bpp = info.estimatedBitrate / (Double(info.width) * Double(info.height) * info.frameRate)
-                    entry.bpp = round(bpp * 100) / 100
+                    entry.sourceBpp = round(bpp * 100) / 100
                 }
             }
 
@@ -71,8 +71,8 @@ actor ResultsWriter {
         if let index = results.files.firstIndex(where: { $0.path == relativePath }) {
             results.files[index].outputPath = outputPath
             results.files[index].outputSize = outputSize
-            if results.files[index].size > 0 {
-                let ratio = Double(outputSize) / Double(results.files[index].size)
+            if results.files[index].sourceSize > 0 {
+                let ratio = Double(outputSize) / Double(results.files[index].sourceSize)
                 results.files[index].compressionRatio = round(ratio * 100) / 100
             }
         }
@@ -120,14 +120,14 @@ struct ResultsFile: Codable {
 struct ResultsFileEntry: Codable {
     var path: String = ""
     var sourcePath: String = ""
-    var size: Int64 = 0
+    var sourceSize: Int64 = 0
     var action: String = ""
-    var codec: String?
-    var width: Int?
-    var height: Int?
-    var frameRate: Double?
-    var bitrateMbps: Double?
-    var bpp: Double?
+    var sourceCodec: String?
+    var sourceWidth: Int?
+    var sourceHeight: Int?
+    var sourceFrameRate: Double?
+    var sourceBitrateMbps: Double?
+    var sourceBpp: Double?
     var finderTags: [String] = []
     var skipReason: String?
     var outputPath: String?
