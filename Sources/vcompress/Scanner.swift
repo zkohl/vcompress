@@ -39,6 +39,7 @@ public struct Scanner {
         var pending: [FileEntry] = []
         var skipCounts: [SkipReason: Int] = [:]
         var warnings: [ScanWarning] = []
+        var allFiles: [ScannedFile] = []
         var totalScanned = 0
 
         for entry in entries {
@@ -61,9 +62,14 @@ public struct Scanner {
 
             totalScanned += 1
 
+            let fileSize = (attrs?[.size] as? Int64)
+                ?? (attrs?[.size] as? NSNumber)?.int64Value
+                ?? 0
+
             // 1. Not a video (typeID.isMovie returns false) -> skip(notVideo)
             guard typeID.isMovie(at: url) else {
                 skipCounts[.notVideo, default: 0] += 1
+                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.notVideo)))
                 continue
             }
 
@@ -72,6 +78,7 @@ public struct Scanner {
             guard Scanner.supportedContainers.contains(ext) else {
                 skipCounts[.unsupportedContainer, default: 0] += 1
                 warnings.append(.unsupportedContainer(path: relativePath, ext: ext))
+                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.unsupportedContainer)))
                 continue
             }
 
@@ -82,20 +89,20 @@ public struct Scanner {
             } catch {
                 warnings.append(.probeFailed(path: relativePath, error: error))
                 skipCounts[.noVideoTrack, default: 0] += 1
+                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.noVideoTrack)))
                 continue
             }
 
             if codecs.isEmpty {
                 skipCounts[.noVideoTrack, default: 0] += 1
+                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.noVideoTrack)))
                 continue
             }
 
             // 4. Below --min-size -> skip(tooSmall)
-            let fileSize = (attrs?[.size] as? Int64)
-                ?? (attrs?[.size] as? NSNumber)?.int64Value
-                ?? 0
             if let minSize = config.minSize, fileSize < minSize {
                 skipCounts[.tooSmall, default: 0] += 1
+                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.tooSmall)))
                 continue
             }
 
@@ -103,11 +110,14 @@ public struct Scanner {
             let hevcCodecs: Set<FourCharCode> = [kCMVideoCodecType_HEVC, FourCharCode(0x68657631)]
             if codecs.contains(where: { hevcCodecs.contains($0) }) {
                 skipCounts[.alreadyHEVC, default: 0] += 1
+                let info = try? await inspector.videoTrackInfo(forFileAt: url)
+                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.alreadyHEVC), trackInfo: info))
                 continue
             }
 
             // 5.5. Already efficiently compressed -> skip(alreadyEfficient)
-            if let info = try? await inspector.videoTrackInfo(forFileAt: url) {
+            let trackInfo = try? await inspector.videoTrackInfo(forFileAt: url)
+            if let info = trackInfo {
                 let isProRes = [
                     kCMVideoCodecType_AppleProRes4444,
                     kCMVideoCodecType_AppleProRes422,
@@ -127,6 +137,7 @@ public struct Scanner {
                     if bpp < 0.60 && mbPerMin < 150.0 {
                         skipCounts[.alreadyEfficient, default: 0] += 1
                         warnings.append(.efficientlyCompressed(path: relativePath, width: info.width, height: info.height, frameRate: info.frameRate, bpp: bpp, mbPerMin: mbPerMin))
+                        allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.alreadyEfficient), trackInfo: info))
                         continue
                     }
                 }
@@ -141,6 +152,7 @@ public struct Scanner {
                         ? "hevc_standard" : stateEntry.preset
                     if normalizedPreset == config.preset {
                         skipCounts[.alreadyDone, default: 0] += 1
+                        allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.alreadyDone), trackInfo: trackInfo))
                         continue
                     }
                     // Preset mismatch -- fall through to pending (re-encode).
@@ -157,13 +169,15 @@ public struct Scanner {
                 sourceContainer: ext
             )
             pending.append(fileEntry)
+            allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .pending, trackInfo: trackInfo))
         }
 
         return ScanResult(
             pending: pending,
             skipCounts: skipCounts,
             warnings: warnings,
-            totalScanned: totalScanned
+            totalScanned: totalScanned,
+            allFiles: allFiles
         )
     }
 }
