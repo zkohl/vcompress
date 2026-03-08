@@ -88,6 +88,9 @@ struct RealExportSessionFactory: ExportSessionFactory {
             )
             writerInput.expectsMediaDataInRealTime = false
 
+            let transform = try await videoTrack.load(.preferredTransform)
+            writerInput.transform = transform
+
             if reader.canAdd(readerOutput) { reader.add(readerOutput) }
             if writer.canAdd(writerInput) { writer.add(writerInput) }
         }
