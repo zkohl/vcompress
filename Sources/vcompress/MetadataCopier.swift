@@ -77,10 +77,10 @@ struct MetadataCopier {
         compressedSize: Int64
     ) throws {
         let qualityValue: String
-        switch quality {
-        case .standard: qualityValue = "preset"
-        case .high: qualityValue = "0.65"
-        case .max: qualityValue = "0.75"
+        if let q = quality.compressionQuality {
+            qualityValue = "\(q)"
+        } else {
+            qualityValue = "preset"
         }
 
         // --- Finder tag ---
