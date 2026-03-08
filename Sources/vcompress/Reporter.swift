@@ -93,7 +93,9 @@ public struct Reporter {
         for file in result.allFiles {
             var entry: [String: Any] = [
                 "path": file.relativePath,
+                "sourcePath": file.sourcePath,
                 "size": file.fileSize,
+                "finderTags": file.finderTags,
             ]
             switch file.classification {
             case .pending:

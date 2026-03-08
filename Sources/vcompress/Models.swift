@@ -11,19 +11,22 @@ public struct FileEntry: Codable, Equatable {
     public let destPath: String
     public let fileSize: Int64
     public let sourceContainer: String
+    public let finderTags: [String]
 
     public init(
         sourcePath: String,
         relativePath: String,
         destPath: String,
         fileSize: Int64,
-        sourceContainer: String
+        sourceContainer: String,
+        finderTags: [String] = []
     ) {
         self.sourcePath = sourcePath
         self.relativePath = relativePath
         self.destPath = destPath
         self.fileSize = fileSize
         self.sourceContainer = sourceContainer
+        self.finderTags = finderTags
     }
 }
 
@@ -250,16 +253,20 @@ public enum FileClassification {
 
 /// A file encountered during scanning, with its classification.
 public struct ScannedFile {
+    public let sourcePath: String
     public let relativePath: String
     public let fileSize: Int64
     public let classification: FileClassification
     public let trackInfo: VideoTrackInfo?
+    public let finderTags: [String]
 
-    public init(relativePath: String, fileSize: Int64, classification: FileClassification, trackInfo: VideoTrackInfo? = nil) {
+    public init(sourcePath: String = "", relativePath: String, fileSize: Int64, classification: FileClassification, trackInfo: VideoTrackInfo? = nil, finderTags: [String] = []) {
+        self.sourcePath = sourcePath
         self.relativePath = relativePath
         self.fileSize = fileSize
         self.classification = classification
         self.trackInfo = trackInfo
+        self.finderTags = finderTags
     }
 }
 

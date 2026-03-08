@@ -249,6 +249,11 @@ struct VCompress: AsyncParsableCommand {
             throw ExitCode(130)
         }
 
+        // Initialize results writer
+        let resultsURL = destURL.appendingPathComponent(".vcompress-results.json")
+        let resultsWriter = ResultsWriter(outputURL: resultsURL, fs: fs)
+        try await resultsWriter.initialize(config: config, scanResult: scanResult)
+
         // Encoding loop
         let encoder = Encoder(factory: exportFactory, fs: fs, inspector: inspector)
         let metadataCopier = MetadataCopier(fs: fs, clock: RealClock())
@@ -275,6 +280,7 @@ struct VCompress: AsyncParsableCommand {
                         encoder: encoder,
                         metadataCopier: metadataCopier,
                         stateManager: stateManager,
+                        resultsWriter: resultsWriter,
                         reporter: reporter,
                         tracker: tracker,
                         preset: preset,
@@ -305,6 +311,7 @@ struct VCompress: AsyncParsableCommand {
                         encoder: encoder,
                         metadataCopier: metadataCopier,
                         stateManager: stateManager,
+                        resultsWriter: resultsWriter,
                         reporter: reporter,
                         tracker: tracker,
                         preset: preset,
@@ -317,6 +324,9 @@ struct VCompress: AsyncParsableCommand {
         }
 
         let wallTime = Date().timeIntervalSince(startTime)
+
+        // Finalize results JSON
+        try? await resultsWriter.finalize()
 
         // Flush state
         try? await stateManager.flush()
@@ -378,6 +388,7 @@ private func processFile(
     encoder: Encoder,
     metadataCopier: MetadataCopier,
     stateManager: StateManager,
+    resultsWriter: ResultsWriter,
     reporter: Reporter,
     tracker: EncodeTracker,
     preset: String,
@@ -434,6 +445,13 @@ private func processFile(
             outputSize: outputSize
         )
 
+        // Record in results JSON
+        try? await resultsWriter.recordEncoded(
+            relativePath: entry.relativePath,
+            outputPath: entry.destPath,
+            outputSize: outputSize
+        )
+
         // Print progress
         let progress = reporter.formatProgress(
             index: index,
@@ -475,6 +493,12 @@ private func processFile(
         )
 
         await tracker.recordFailure()
+
+        // Record in results JSON
+        try? await resultsWriter.recordFailed(
+            relativePath: entry.relativePath,
+            error: errorMessage
+        )
 
         // Log the failure
         let logLine = reporter.formatLogLine(
