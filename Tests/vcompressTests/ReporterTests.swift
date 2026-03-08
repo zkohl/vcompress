@@ -230,10 +230,16 @@ final class ReporterTests: XCTestCase {
         XCTAssertEqual(est.high, 62_500_000_000)   // 20%
     }
 
+    func test_estimatedOutput_veryHigh_rangeCorrect() {
+        let est = Reporter.estimateOutput(inputSize: 312_500_000_000, quality: .veryHigh)
+        XCTAssertEqual(est.low, 31_250_000_000)    // 10%
+        XCTAssertEqual(est.high, 93_750_000_000)   // 30%
+    }
+
     func test_estimatedOutput_max_rangeCorrect() {
         let est = Reporter.estimateOutput(inputSize: 312_500_000_000, quality: .max)
-        XCTAssertEqual(est.low, 46_875_000_000)    // 15%
-        XCTAssertEqual(est.high, 109_375_000_000)  // 35%
+        XCTAssertEqual(est.low, 62_500_000_000)    // 20%
+        XCTAssertEqual(est.high, 140_625_000_000)  // 45%
     }
 
     func test_estimatedOutput_zeroInput_returnsZero() {

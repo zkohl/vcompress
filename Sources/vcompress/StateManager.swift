@@ -48,6 +48,7 @@ public actor StateManager {
         switch quality {
         case .standard: self.preset = "hevc_standard"
         case .high: self.preset = "hevc_high"
+        case .veryHigh: self.preset = "hevc_very_high"
         case .max: self.preset = "hevc_max"
         }
         self.stateURL = destDir.appendingPathComponent(".vcompress-state.json")

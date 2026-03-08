@@ -77,7 +77,26 @@ public enum FileStatus: String, Codable {
 public enum Quality: String, CaseIterable, Codable {
     case standard
     case high
+    case veryHigh
     case max
+
+    /// The numeric compression quality value, or nil for standard (which uses Apple's preset).
+    var compressionQuality: Double? {
+        switch self {
+        case .standard: return nil
+        case .high: return 0.65
+        case .veryHigh: return 0.75
+        case .max: return 0.85
+        }
+    }
+
+    /// Label for log output, e.g. "[high q=0.65]" or "[standard]".
+    var logLabel: String {
+        if let q = compressionQuality {
+            return "[\(rawValue) q=\(q)]"
+        }
+        return "[\(rawValue)]"
+    }
 }
 
 // MARK: - Config

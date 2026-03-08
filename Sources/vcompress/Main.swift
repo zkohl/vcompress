@@ -23,7 +23,7 @@ struct VCompress: AsyncParsableCommand {
     @Option(name: .long, help: "Skip files smaller than this (e.g. 50MB, 1GB).")
     var minSize: String?
 
-    @Option(name: .long, help: "Quality tier: standard (default), high, or max.")
+    @Option(name: .long, help: "Quality tier: standard (default), high, very-high, or max.")
     var quality: Quality = .standard
 
     @Flag(name: .long, help: "Skip confirmation prompt.")
@@ -122,6 +122,7 @@ struct VCompress: AsyncParsableCommand {
         switch quality {
         case .standard: preset = "hevc_standard"
         case .high: preset = "hevc_high"
+        case .veryHigh: preset = "hevc_very_high"
         case .max: preset = "hevc_max"
         }
 
@@ -411,7 +412,7 @@ private func processFile(
         // Log line
         let logLine = reporter.formatLogLine(
             level: "INFO",
-            message: "encoded \(entry.relativePath) \(Reporter.formatSize(entry.fileSize)) -> \(Reporter.formatSize(outputSize))"
+            message: "encoded \(entry.relativePath) \(quality.logLabel) \(Reporter.formatSize(entry.fileSize)) -> \(Reporter.formatSize(outputSize))"
         )
         await tracker.addLogLine(logLine)
 
