@@ -110,7 +110,10 @@ public struct Scanner {
             if !config.fresh, let state = state, let stateEntry = state.files[relativePath] {
                 if stateEntry.status == .completed {
                     // Preset must match for skip; otherwise re-encode.
-                    if stateEntry.preset == config.preset {
+                    // Treat legacy "hevc_highest_quality" as equivalent to "hevc_standard".
+                    let normalizedPreset = stateEntry.preset == "hevc_highest_quality"
+                        ? "hevc_standard" : stateEntry.preset
+                    if normalizedPreset == config.preset {
                         skipCounts[.alreadyDone, default: 0] += 1
                         continue
                     }

@@ -27,7 +27,7 @@ public actor StateManager {
     /// Whether there are unsaved changes since the last flush.
     private var dirty: Bool = false
 
-    /// Preset string for the current run (derived from lossless flag).
+    /// Preset string for the current run (derived from quality tier).
     private let preset: String
 
     // MARK: - Initialization
@@ -38,14 +38,18 @@ public actor StateManager {
         lock: ProcessLockProvider,
         clock: Clock,
         fresh: Bool = false,
-        lossless: Bool = false
+        quality: Quality = .standard
     ) {
         self.destDir = destDir
         self.fs = fs
         self.lock = lock
         self.clock = clock
         self.fresh = fresh
-        self.preset = lossless ? "hevc_lossless" : "hevc_highest_quality"
+        switch quality {
+        case .standard: self.preset = "hevc_standard"
+        case .high: self.preset = "hevc_high"
+        case .max: self.preset = "hevc_max"
+        }
         self.stateURL = destDir.appendingPathComponent(".vcompress-state.json")
         self.lockURL = destDir.appendingPathComponent(".vcompress.lock")
         self.state = StateFile(

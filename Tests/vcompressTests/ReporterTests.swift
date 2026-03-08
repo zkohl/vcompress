@@ -9,7 +9,7 @@ final class ReporterTests: XCTestCase {
     }
 
     private func makeConfig(
-        lossless: Bool = false,
+        quality: Quality = .standard,
         jobs: Int = 3,
         sourceDir: String = "/Volumes/Media/Raw",
         destDir: String = "/Volumes/Media/Compressed"
@@ -18,7 +18,7 @@ final class ReporterTests: XCTestCase {
             sourceDir: URL(fileURLWithPath: sourceDir),
             destDir: URL(fileURLWithPath: destDir),
             jobs: jobs,
-            lossless: lossless
+            quality: quality
         )
     }
 
@@ -91,7 +91,7 @@ final class ReporterTests: XCTestCase {
         XCTAssert(plan.contains("Estimated output:"), "Plan should contain estimated output. Got:\n\(plan)")
 
         // Verify the range values are present (low = 20% of 500GB, high = 35% of 500GB)
-        let est = Reporter.estimateOutput(inputSize: 500_000_000_000, lossless: false)
+        let est = Reporter.estimateOutput(inputSize: 500_000_000_000, quality: .standard)
         let lowStr = Reporter.formatSize(est.low)
         let highStr = Reporter.formatSize(est.high)
         XCTAssert(plan.contains(lowStr),
@@ -100,7 +100,7 @@ final class ReporterTests: XCTestCase {
             "Plan should contain high estimate '\(highStr)'. Got:\n\(plan)")
     }
 
-    func test_planSummary_losslessPreset_showsCorrectLabel() {
+    func test_planSummary_maxQuality_showsCorrectLabel() {
         let entries = [
             FileEntry(
                 sourcePath: "/src/clip.mp4",
@@ -120,19 +120,19 @@ final class ReporterTests: XCTestCase {
 
         let clock = makeClock()
         let reporter = Reporter(clock: clock)
-        let config = makeConfig(lossless: true)
+        let config = makeConfig(quality: .max)
         let plan = reporter.formatPlan(result, config: config)
 
-        XCTAssert(plan.contains("lossless"),
-            "Lossless preset plan should indicate lossless. Got:\n\(plan)")
-        // Verify estimated range uses lossless percentages (60%-80%)
-        let est = Reporter.estimateOutput(inputSize: 100_000_000, lossless: true)
+        XCTAssert(plan.contains("max"),
+            "Max quality plan should indicate max. Got:\n\(plan)")
+        // Verify estimated range uses max percentages (15%-35%)
+        let est = Reporter.estimateOutput(inputSize: 100_000_000, quality: .max)
         let lowStr = Reporter.formatSize(est.low)
         let highStr = Reporter.formatSize(est.high)
         XCTAssert(plan.contains(lowStr),
-            "Lossless plan should contain low estimate '\(lowStr)'. Got:\n\(plan)")
+            "Max quality plan should contain low estimate '\(lowStr)'. Got:\n\(plan)")
         XCTAssert(plan.contains(highStr),
-            "Lossless plan should contain high estimate '\(highStr)'. Got:\n\(plan)")
+            "Max quality plan should contain high estimate '\(highStr)'. Got:\n\(plan)")
     }
 
     // MARK: - Progress Line
@@ -218,26 +218,32 @@ final class ReporterTests: XCTestCase {
 
     // MARK: - Estimation
 
-    func test_estimatedOutput_lossy_rangeCorrect() {
-        let est = Reporter.estimateOutput(inputSize: 312_500_000_000, lossless: false)
-        XCTAssertEqual(est.low, 62_500_000_000)    // 20%
+    func test_estimatedOutput_standard_rangeCorrect() {
+        let est = Reporter.estimateOutput(inputSize: 312_500_000_000, quality: .standard)
+        XCTAssertEqual(est.low, 15_625_000_000)    // 5%
+        XCTAssertEqual(est.high, 46_875_000_000)   // 15%
+    }
+
+    func test_estimatedOutput_high_rangeCorrect() {
+        let est = Reporter.estimateOutput(inputSize: 312_500_000_000, quality: .high)
+        XCTAssertEqual(est.low, 15_625_000_000)    // 5%
+        XCTAssertEqual(est.high, 62_500_000_000)   // 20%
+    }
+
+    func test_estimatedOutput_max_rangeCorrect() {
+        let est = Reporter.estimateOutput(inputSize: 312_500_000_000, quality: .max)
+        XCTAssertEqual(est.low, 46_875_000_000)    // 15%
         XCTAssertEqual(est.high, 109_375_000_000)  // 35%
     }
 
-    func test_estimatedOutput_lossless_rangeCorrect() {
-        let est = Reporter.estimateOutput(inputSize: 312_500_000_000, lossless: true)
-        XCTAssertEqual(est.low, 187_500_000_000)   // 60%
-        XCTAssertEqual(est.high, 250_000_000_000)  // 80%
-    }
-
     func test_estimatedOutput_zeroInput_returnsZero() {
-        let estLossy = Reporter.estimateOutput(inputSize: 0, lossless: false)
-        XCTAssertEqual(estLossy.low, 0)
-        XCTAssertEqual(estLossy.high, 0)
+        let estStandard = Reporter.estimateOutput(inputSize: 0, quality: .standard)
+        XCTAssertEqual(estStandard.low, 0)
+        XCTAssertEqual(estStandard.high, 0)
 
-        let estLossless = Reporter.estimateOutput(inputSize: 0, lossless: true)
-        XCTAssertEqual(estLossless.low, 0)
-        XCTAssertEqual(estLossless.high, 0)
+        let estMax = Reporter.estimateOutput(inputSize: 0, quality: .max)
+        XCTAssertEqual(estMax.low, 0)
+        XCTAssertEqual(estMax.high, 0)
     }
 
     // MARK: - Format Size

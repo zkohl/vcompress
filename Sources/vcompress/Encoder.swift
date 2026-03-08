@@ -13,21 +13,15 @@ struct Encoder {
     /// Orchestration:
     /// 1. Compute temp URL: destPath + ".tmp"
     /// 2. Create parent directories via fs.createDirectory
-    /// 3. Determine preset from lossless flag
-    /// 4. Determine AVFileType from sourceContainer
-    /// 5. Call factory.export to temp URL
-    /// 6. Validate output: file exists, size > 0, inspector.isPlayable
-    /// 7. Move temp to final path
-    /// 8. On ANY failure: delete temp file if it exists, rethrow
-    func encode(_ entry: FileEntry, lossless: Bool) async throws {
+    /// 3. Determine AVFileType from sourceContainer
+    /// 4. Call factory.export to temp URL with quality tier
+    /// 5. Validate output: file exists, size > 0, inspector.isPlayable
+    /// 6. Move temp to final path
+    /// 7. On ANY failure: delete temp file if it exists, rethrow
+    func encode(_ entry: FileEntry, quality: Quality) async throws {
         let destURL = URL(fileURLWithPath: entry.destPath)
         let tmpURL = URL(fileURLWithPath: entry.destPath + ".tmp")
         let sourceURL = URL(fileURLWithPath: entry.sourcePath)
-
-        // Determine preset
-        let preset = lossless
-            ? "AVAssetExportPresetHEVCHighestQualityLossless"
-            : "AVAssetExportPresetHEVCHighestQuality"
 
         // Determine file type from source container
         let fileType: AVFileType = Self.fileType(for: entry.sourceContainer)
@@ -42,7 +36,7 @@ struct Encoder {
                 source: sourceURL,
                 destination: tmpURL,
                 fileType: fileType,
-                preset: preset
+                quality: quality
             )
 
             // Validate output exists and has size > 0

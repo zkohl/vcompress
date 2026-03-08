@@ -2,6 +2,8 @@ import ArgumentParser
 import Foundation
 import AVFoundation
 
+extension Quality: ExpressibleByArgument {}
+
 @main
 struct VCompress: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -21,8 +23,8 @@ struct VCompress: AsyncParsableCommand {
     @Option(name: .long, help: "Skip files smaller than this (e.g. 50MB, 1GB).")
     var minSize: String?
 
-    @Flag(name: .long, help: "Use lossless HEVC preset.")
-    var lossless: Bool = false
+    @Option(name: .long, help: "Quality tier: standard (default), high, or max.")
+    var quality: Quality = .standard
 
     @Flag(name: .long, help: "Skip confirmation prompt.")
     var yes: Bool = false
@@ -109,14 +111,19 @@ struct VCompress: AsyncParsableCommand {
             destDir: destURL,
             jobs: resolvedJobs,
             minSize: parsedMinSize,
-            lossless: lossless,
+            quality: quality,
             yes: yes,
             dryRun: dryRun,
             fresh: fresh,
             verbose: verbose
         )
 
-        let preset = lossless ? "hevc_lossless" : "hevc_highest_quality"
+        let preset: String
+        switch quality {
+        case .standard: preset = "hevc_standard"
+        case .high: preset = "hevc_high"
+        case .max: preset = "hevc_max"
+        }
 
         // Install signal handler
         installSignalHandler()
@@ -136,7 +143,7 @@ struct VCompress: AsyncParsableCommand {
             lock: processLock,
             clock: clock,
             fresh: fresh,
-            lossless: lossless
+            quality: quality
         )
 
         do {
@@ -179,7 +186,7 @@ struct VCompress: AsyncParsableCommand {
         if let availableSpace = try? fs.availableSpace(atPath: destURL.path) {
             let estimate = Reporter.estimateOutput(
                 inputSize: scanResult.pending.reduce(Int64(0)) { $0 + $1.fileSize },
-                lossless: lossless
+                quality: quality
             )
             if availableSpace < estimate.high {
                 print("\n  \u{26a0} Warning: Available disk space (\(Reporter.formatSize(availableSpace))) may be insufficient.")
@@ -243,7 +250,7 @@ struct VCompress: AsyncParsableCommand {
                         reporter: reporter,
                         tracker: tracker,
                         preset: preset,
-                        lossless: lossless,
+                        quality: quality,
                         totalFiles: totalFiles,
                         verbose: verbose
                     )
@@ -273,7 +280,7 @@ struct VCompress: AsyncParsableCommand {
                         reporter: reporter,
                         tracker: tracker,
                         preset: preset,
-                        lossless: lossless,
+                        quality: quality,
                         totalFiles: totalFiles,
                         verbose: verbose
                     )
@@ -346,7 +353,7 @@ private func processFile(
     reporter: Reporter,
     tracker: EncodeTracker,
     preset: String,
-    lossless: Bool,
+    quality: Quality,
     totalFiles: Int,
     verbose: Bool
 ) async {
@@ -361,7 +368,7 @@ private func processFile(
 
     do {
         // Encode
-        try await encoder.encode(entry, lossless: lossless)
+        try await encoder.encode(entry, quality: quality)
 
         // Copy metadata
         try metadataCopier.copy(from: entry.sourcePath, to: entry.destPath)

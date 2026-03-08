@@ -44,7 +44,7 @@ final class EncoderTests: XCTestCase {
         inspector.playability[entry.destPath] = true
 
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
-        try await encoder.encode(entry, lossless: false)
+        try await encoder.encode(entry, quality: .standard)
 
         // Verify: tmp file was moved to final path
         XCTAssertEqual(fs.movedItems.count, 1)
@@ -68,7 +68,7 @@ final class EncoderTests: XCTestCase {
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
 
         do {
-            try await encoder.encode(entry, lossless: false)
+            try await encoder.encode(entry, quality: .standard)
             XCTFail("Expected encode to throw")
         } catch {
             // Verify tmp file was cleaned up
@@ -92,7 +92,7 @@ final class EncoderTests: XCTestCase {
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
 
         do {
-            try await encoder.encode(entry, lossless: false)
+            try await encoder.encode(entry, quality: .standard)
             XCTFail("Expected encode to throw for zero-byte file")
         } catch let error as EncodingError {
             if case .outputValidation(let msg) = error {
@@ -122,7 +122,7 @@ final class EncoderTests: XCTestCase {
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
 
         do {
-            try await encoder.encode(entry, lossless: false)
+            try await encoder.encode(entry, quality: .standard)
             XCTFail("Expected encode to throw for non-playable output")
         } catch let error as EncodingError {
             if case .outputValidation(let msg) = error {
@@ -149,7 +149,7 @@ final class EncoderTests: XCTestCase {
         inspector.playability[entry.destPath] = true
 
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
-        try await encoder.encode(entry, lossless: false)
+        try await encoder.encode(entry, quality: .standard)
 
         XCTAssertEqual(factory.exportCalls.count, 1)
         XCTAssertEqual(factory.exportCalls[0].fileType, .mov)
@@ -172,7 +172,7 @@ final class EncoderTests: XCTestCase {
         inspector.playability[entry.destPath] = true
 
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
-        try await encoder.encode(entry, lossless: false)
+        try await encoder.encode(entry, quality: .standard)
 
         XCTAssertEqual(factory.exportCalls.count, 1)
         XCTAssertEqual(factory.exportCalls[0].fileType, .mp4)
@@ -195,7 +195,7 @@ final class EncoderTests: XCTestCase {
         inspector.playability[entry.destPath] = true
 
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
-        try await encoder.encode(entry, lossless: false)
+        try await encoder.encode(entry, quality: .standard)
 
         XCTAssertEqual(factory.exportCalls.count, 1)
         // m4v uses AVFileType.mp4 internally
@@ -219,16 +219,16 @@ final class EncoderTests: XCTestCase {
         inspector.playability[entry.destPath] = true
 
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
-        try await encoder.encode(entry, lossless: false)
+        try await encoder.encode(entry, quality: .standard)
 
         // Verify createDirectory was called for the parent directory
         XCTAssertEqual(fs.createdDirectories.count, 1)
         XCTAssertEqual(fs.createdDirectories[0].path, "/dest/subdir/nested")
     }
 
-    // MARK: - test_losslessPreset_usesCorrectString
+    // MARK: - test_standardQuality_passesCorrectQuality
 
-    func test_losslessPreset_usesCorrectString() async throws {
+    func test_standardQuality_passesCorrectQuality() async throws {
         let fs = MockFileSystem()
         let factory = makeFactory()
         let inspector = MockAssetInspector()
@@ -239,18 +239,15 @@ final class EncoderTests: XCTestCase {
         inspector.playability[entry.destPath] = true
 
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
-        try await encoder.encode(entry, lossless: true)
+        try await encoder.encode(entry, quality: .standard)
 
         XCTAssertEqual(factory.exportCalls.count, 1)
-        XCTAssertEqual(
-            factory.exportCalls[0].preset,
-            "AVAssetExportPresetHEVCHighestQualityLossless"
-        )
+        XCTAssertEqual(factory.exportCalls[0].quality, .standard)
     }
 
-    // MARK: - test_lossyPreset_usesCorrectString
+    // MARK: - test_highQuality_passesCorrectQuality
 
-    func test_lossyPreset_usesCorrectString() async throws {
+    func test_highQuality_passesCorrectQuality() async throws {
         let fs = MockFileSystem()
         let factory = makeFactory()
         let inspector = MockAssetInspector()
@@ -261,12 +258,28 @@ final class EncoderTests: XCTestCase {
         inspector.playability[entry.destPath] = true
 
         let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
-        try await encoder.encode(entry, lossless: false)
+        try await encoder.encode(entry, quality: .high)
 
         XCTAssertEqual(factory.exportCalls.count, 1)
-        XCTAssertEqual(
-            factory.exportCalls[0].preset,
-            "AVAssetExportPresetHEVCHighestQuality"
-        )
+        XCTAssertEqual(factory.exportCalls[0].quality, .high)
+    }
+
+    // MARK: - test_maxQuality_passesCorrectQuality
+
+    func test_maxQuality_passesCorrectQuality() async throws {
+        let fs = MockFileSystem()
+        let factory = makeFactory()
+        let inspector = MockAssetInspector()
+        let entry = makeEntry()
+
+        let tmpPath = entry.destPath + ".tmp"
+        fs.addFile(path: tmpPath, size: 1024)
+        inspector.playability[entry.destPath] = true
+
+        let encoder = Encoder(factory: factory, fs: fs, inspector: inspector)
+        try await encoder.encode(entry, quality: .max)
+
+        XCTAssertEqual(factory.exportCalls.count, 1)
+        XCTAssertEqual(factory.exportCalls[0].quality, .max)
     }
 }

@@ -71,6 +71,15 @@ public enum FileStatus: String, Codable {
     case skipped
 }
 
+// MARK: - Quality
+
+/// Quality tier for HEVC encoding.
+public enum Quality: String, CaseIterable, Codable {
+    case standard
+    case high
+    case max
+}
+
 // MARK: - Config
 
 /// Runtime configuration derived from CLI arguments.
@@ -79,7 +88,7 @@ public struct Config {
     public let destDir: URL
     public let jobs: Int
     public let minSize: Int64?
-    public let lossless: Bool
+    public let quality: Quality
     public let yes: Bool
     public let dryRun: Bool
     public let fresh: Bool
@@ -90,7 +99,7 @@ public struct Config {
         destDir: URL,
         jobs: Int,
         minSize: Int64? = nil,
-        lossless: Bool = false,
+        quality: Quality = .standard,
         yes: Bool = false,
         dryRun: Bool = false,
         fresh: Bool = false,
@@ -100,7 +109,7 @@ public struct Config {
         self.destDir = destDir
         self.jobs = jobs
         self.minSize = minSize
-        self.lossless = lossless
+        self.quality = quality
         self.yes = yes
         self.dryRun = dryRun
         self.fresh = fresh
@@ -116,7 +125,7 @@ public struct ScanConfig {
     public let fresh: Bool
     public let preset: String
 
-    public init(minSize: Int64? = nil, fresh: Bool = false, preset: String = "hevc_highest_quality") {
+    public init(minSize: Int64? = nil, fresh: Bool = false, preset: String = "hevc_standard") {
         self.minSize = minSize
         self.fresh = fresh
         self.preset = preset

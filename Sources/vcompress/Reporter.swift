@@ -14,11 +14,17 @@ public struct Reporter {
     /// Formats the plan summary shown before encoding begins.
     public func formatPlan(_ result: ScanResult, config: Config) -> String {
         let pendingSize = result.pending.reduce(Int64(0)) { $0 + $1.fileSize }
-        let estimate = Self.estimateOutput(inputSize: pendingSize, lossless: config.lossless)
+        let estimate = Self.estimateOutput(inputSize: pendingSize, quality: config.quality)
 
-        let presetLabel = config.lossless
-            ? "HEVC Highest Quality Lossless (lossless)"
-            : "HEVC Highest Quality (lossy)"
+        let presetLabel: String
+        switch config.quality {
+        case .standard:
+            presetLabel = "HEVC Highest Quality (standard)"
+        case .high:
+            presetLabel = "HEVC Quality 0.65 (high)"
+        case .max:
+            presetLabel = "HEVC Quality 0.75 (max)"
+        }
 
         var lines: [String] = []
         lines.append("vcompress plan")
@@ -127,18 +133,21 @@ public struct Reporter {
 
     // MARK: - Estimation
 
-    /// Estimates the output size range for a given input size and preset.
-    /// Lossy: 20%-35% of input. Lossless: 60%-80% of input.
-    public static func estimateOutput(inputSize: Int64, lossless: Bool) -> (low: Int64, high: Int64) {
-        if lossless {
-            let low = Int64(Double(inputSize) * 0.60)
-            let high = Int64(Double(inputSize) * 0.80)
-            return (low, high)
-        } else {
-            let low = Int64(Double(inputSize) * 0.20)
-            let high = Int64(Double(inputSize) * 0.35)
-            return (low, high)
+    /// Estimates the output size range for a given input size and quality tier.
+    /// Standard: 5%-15%, High: 5%-20%, Max: 15%-35%.
+    public static func estimateOutput(inputSize: Int64, quality: Quality) -> (low: Int64, high: Int64) {
+        let (lowFraction, highFraction): (Double, Double)
+        switch quality {
+        case .standard:
+            (lowFraction, highFraction) = (0.05, 0.15)
+        case .high:
+            (lowFraction, highFraction) = (0.05, 0.20)
+        case .max:
+            (lowFraction, highFraction) = (0.15, 0.35)
         }
+        let low = Int64(Double(inputSize) * lowFraction)
+        let high = Int64(Double(inputSize) * highFraction)
+        return (low, high)
     }
 
     // MARK: - Log Filename

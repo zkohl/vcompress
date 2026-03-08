@@ -84,7 +84,7 @@ public protocol ExportSessionFactory {
         source: URL,
         destination: URL,
         fileType: AVFileType,
-        preset: String
+        quality: Quality
     ) async throws
 }
 

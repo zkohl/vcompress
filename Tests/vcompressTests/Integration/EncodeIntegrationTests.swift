@@ -120,7 +120,7 @@ final class EncodeIntegrationTests: XCTestCase {
             sourceContainer: "mov"
         )
 
-        try await encoder.encode(entry, lossless: false)
+        try await encoder.encode(entry, quality: .standard)
 
         // Verify output exists
         XCTAssertTrue(FileManager.default.fileExists(atPath: dest.path), "Output file should exist")

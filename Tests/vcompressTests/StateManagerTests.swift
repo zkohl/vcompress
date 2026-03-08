@@ -7,7 +7,7 @@ final class StateManagerTests: XCTestCase {
 
     private func makeComponents(
         fresh: Bool = false,
-        lossless: Bool = false,
+        quality: Quality = .standard,
         lockShouldSucceed: Bool = true
     ) -> (MockFileSystem, MockProcessLock, MockClock, URL) {
         let fs = MockFileSystem()
@@ -25,7 +25,7 @@ final class StateManagerTests: XCTestCase {
         clock: MockClock,
         destDir: URL,
         fresh: Bool = false,
-        lossless: Bool = false
+        quality: Quality = .standard
     ) -> StateManager {
         StateManager(
             destDir: destDir,
@@ -33,7 +33,7 @@ final class StateManagerTests: XCTestCase {
             lock: lock,
             clock: clock,
             fresh: fresh,
-            lossless: lossless
+            quality: quality
         )
     }
 
@@ -67,7 +67,7 @@ final class StateManagerTests: XCTestCase {
         // Mark a file completed
         try await manager.markCompleted(
             relativePath: "video/clip.mp4",
-            preset: "hevc_highest_quality",
+            preset: "hevc_standard",
             sourceSize: 500_000_000,
             outputSize: 125_000_000
         )
@@ -81,7 +81,7 @@ final class StateManagerTests: XCTestCase {
         let entry = state.files["video/clip.mp4"]
         XCTAssertNotNil(entry)
         XCTAssertEqual(entry?.status, .completed)
-        XCTAssertEqual(entry?.preset, "hevc_highest_quality")
+        XCTAssertEqual(entry?.preset, "hevc_standard")
         XCTAssertEqual(entry?.sourceSize, 500_000_000)
         XCTAssertEqual(entry?.outputSize, 125_000_000)
         XCTAssertNotNil(entry?.completedAt)
@@ -100,7 +100,7 @@ final class StateManagerTests: XCTestCase {
             files: [
                 "video/encoding.mp4": StateFileEntry(
                     status: .inProgress,
-                    preset: "hevc_highest_quality",
+                    preset: "hevc_standard",
                     sourceSize: 200_000_000,
                     startedAt: clock.currentDate
                 )
@@ -130,7 +130,7 @@ final class StateManagerTests: XCTestCase {
             files: [
                 "video/done.mp4": StateFileEntry(
                     status: .completed,
-                    preset: "hevc_highest_quality",
+                    preset: "hevc_standard",
                     sourceSize: 300_000_000,
                     outputSize: 90_000_000,
                     completedAt: clock.currentDate
@@ -156,7 +156,7 @@ final class StateManagerTests: XCTestCase {
     func test_presetMismatchReturnsPending() async throws {
         let (fs, lock, clock, destDir) = makeComponents()
 
-        // Write a state file with a completed entry using lossy preset
+        // Write a state file with a completed entry using standard preset
         let existingState = StateFile(
             version: 1,
             created: clock.currentDate,
@@ -164,7 +164,7 @@ final class StateManagerTests: XCTestCase {
             files: [
                 "video/clip.mp4": StateFileEntry(
                     status: .completed,
-                    preset: "hevc_highest_quality",
+                    preset: "hevc_standard",
                     sourceSize: 300_000_000,
                     outputSize: 90_000_000,
                     completedAt: clock.currentDate
@@ -175,39 +175,39 @@ final class StateManagerTests: XCTestCase {
         let stateURL = destDir.appendingPathComponent(".vcompress-state.json")
         fs.addFile(path: stateURL.path, size: Int64(data.count), data: data)
 
-        // Load with lossless=false (same preset "hevc_highest_quality")
+        // Load with quality=.standard (same preset "hevc_standard")
         let manager = makeManager(
             fs: fs, lock: lock, clock: clock, destDir: destDir,
-            lossless: false
+            quality: .standard
         )
         try await manager.load()
 
         // The entry is completed with a matching preset - should still be completed
         let entry = await manager.status(for: "video/clip.mp4")
         XCTAssertEqual(entry?.status, .completed)
-        XCTAssertEqual(entry?.preset, "hevc_highest_quality")
+        XCTAssertEqual(entry?.preset, "hevc_standard")
 
-        // Now check: if current run is lossless, preset differs
+        // Now check: if current run is high quality, preset differs
         let currentPreset = await manager.currentPreset()
-        XCTAssertEqual(currentPreset, "hevc_highest_quality")
+        XCTAssertEqual(currentPreset, "hevc_standard")
 
-        // Load a new manager with lossless=true to get the lossless preset
+        // Load a new manager with quality=.high to get a different preset
         let manager2 = makeManager(
             fs: fs, lock: lock, clock: clock, destDir: destDir,
-            lossless: true
+            quality: .high
         )
         try await manager2.load()
         let preset2 = await manager2.currentPreset()
-        XCTAssertEqual(preset2, "hevc_lossless")
+        XCTAssertEqual(preset2, "hevc_high")
 
-        // The entry was encoded with "hevc_highest_quality" but current is "hevc_lossless"
+        // The entry was encoded with "hevc_standard" but current is "hevc_high"
         // The Scanner uses this mismatch to treat it as pending.
         // StateManager just stores the data; the Scanner checks preset match.
         let entry2 = await manager2.status(for: "video/clip.mp4")
         XCTAssertNotNil(entry2)
-        XCTAssertEqual(entry2?.preset, "hevc_highest_quality")
+        XCTAssertEqual(entry2?.preset, "hevc_standard")
         XCTAssertNotEqual(entry2?.preset, preset2,
-            "Preset mismatch: entry was lossy but current run is lossless")
+            "Preset mismatch: entry was standard but current run is high")
     }
 
     // MARK: - test_markCompleted_recordsPresetAndSizes
@@ -219,7 +219,7 @@ final class StateManagerTests: XCTestCase {
 
         try await manager.markCompleted(
             relativePath: "trip/DSC0001.MP4",
-            preset: "hevc_highest_quality",
+            preset: "hevc_standard",
             sourceSize: 524_288_000,
             outputSize: 132_120_000
         )
@@ -227,7 +227,7 @@ final class StateManagerTests: XCTestCase {
         let entry = await manager.status(for: "trip/DSC0001.MP4")
         XCTAssertNotNil(entry)
         XCTAssertEqual(entry?.status, .completed)
-        XCTAssertEqual(entry?.preset, "hevc_highest_quality")
+        XCTAssertEqual(entry?.preset, "hevc_standard")
         XCTAssertEqual(entry?.sourceSize, 524_288_000)
         XCTAssertEqual(entry?.outputSize, 132_120_000)
         XCTAssertNotNil(entry?.completedAt)
@@ -242,7 +242,7 @@ final class StateManagerTests: XCTestCase {
 
         try await manager.markFailed(
             relativePath: "trip/DSC0003.MOV",
-            preset: "hevc_highest_quality",
+            preset: "hevc_standard",
             sourceSize: 1_048_576_000,
             error: "export_failed: The operation could not be completed"
         )
@@ -263,7 +263,7 @@ final class StateManagerTests: XCTestCase {
 
         try await manager.markCompleted(
             relativePath: "video/clip.mp4",
-            preset: "hevc_highest_quality",
+            preset: "hevc_standard",
             sourceSize: 100_000,
             outputSize: 50_000
         )
@@ -287,7 +287,7 @@ final class StateManagerTests: XCTestCase {
         // First markCompleted triggers a write (lastFlush is distantPast)
         try await manager.markCompleted(
             relativePath: "file1.mp4",
-            preset: "hevc_highest_quality",
+            preset: "hevc_standard",
             sourceSize: 100,
             outputSize: 50
         )
@@ -298,7 +298,7 @@ final class StateManagerTests: XCTestCase {
         for i in 2...10 {
             try await manager.markCompleted(
                 relativePath: "file\(i).mp4",
-                preset: "hevc_highest_quality",
+                preset: "hevc_standard",
                 sourceSize: Int64(i * 100),
                 outputSize: Int64(i * 50)
             )
@@ -318,7 +318,7 @@ final class StateManagerTests: XCTestCase {
         clock.advance(by: 2.0)
         try await manager.markCompleted(
             relativePath: "file11.mp4",
-            preset: "hevc_highest_quality",
+            preset: "hevc_standard",
             sourceSize: 1100,
             outputSize: 550
         )

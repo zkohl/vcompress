@@ -1,6 +1,6 @@
 # vcompress
 
-Batch-convert H.264 video files to HEVC (H.265) using Apple's hardware-accelerated `AVAssetExportSession`. Preserves directory structure, file metadata (timestamps, Finder tags), and supports resumable encoding via a JSON state file.
+Batch-convert H.264 video files to HEVC (H.265) using Apple's hardware-accelerated video encoding. Preserves directory structure, file metadata (timestamps, Finder tags), and supports resumable encoding via a JSON state file.
 
 ## Requirements
 
@@ -28,7 +28,7 @@ vcompress <source-dir> <dest-dir> [options]
 |------|-------------|
 | `--jobs <n>` | Parallel encode jobs, 1-8 (default: auto-detected from chip) |
 | `--min-size <size>` | Skip files smaller than this, e.g. `50MB`, `1GB` |
-| `--lossless` | Use lossless HEVC preset (larger output, no quality loss) |
+| `--quality <tier>` | Quality tier: `standard` (default), `high`, or `max` |
 | `--fresh` | Ignore existing state file; re-encode all files |
 | `--dry-run` | Print the encoding plan and exit |
 | `--yes` | Skip the confirmation prompt |
@@ -40,8 +40,8 @@ vcompress <source-dir> <dest-dir> [options]
 # Encode all H.264 files, auto-detect parallelism
 vcompress /Volumes/Media/Raw /Volumes/Media/Compressed
 
-# Lossless encode, skip files under 100MB, 4 parallel jobs
-vcompress /Volumes/Media/Raw /Volumes/Media/Compressed --lossless --min-size 100MB --jobs 4
+# Max quality encode, skip files under 100MB, 4 parallel jobs
+vcompress /Volumes/Media/Raw /Volumes/Media/Compressed --quality max --min-size 100MB --jobs 4
 
 # Preview what would be encoded
 vcompress /Volumes/Media/Raw /Volumes/Media/Compressed --dry-run
@@ -65,6 +65,14 @@ vcompress /Volumes/Media/Raw /Volumes/Media/Compressed --dry-run
 | `.mp4` | MPEG-4 `.mp4` |
 | `.m4v` | MPEG-4 `.mp4` (preserves `.m4v` extension) |
 
+### Quality Tiers
+
+| Tier | Method | Typical Savings | Description |
+|------|--------|-----------------|-------------|
+| `standard` | AVAssetExportSession (HEVCHighestQuality) | ~85–95% | Apple's built-in highest quality preset |
+| `high` | AVAssetReader/Writer (quality 0.65) | ~80–90% | Explicit quality control, good compression |
+| `max` | AVAssetReader/Writer (quality 0.75) | ~70–85% | Best quality, least compression |
+
 ### Auto-detected Job Count
 
 | Chip | Default Jobs |
@@ -80,7 +88,7 @@ vcompress writes a `.vcompress-state.json` file in the destination directory to 
 
 - **Resuming** interrupted encodes (files marked in-progress reset to pending on restart)
 - **Skipping** already-encoded files on subsequent runs
-- **Re-encoding** when switching presets (lossy <-> lossless)
+- **Re-encoding** when switching presets (standard <-> high <-> max)
 
 Use `--fresh` to ignore the state file and re-encode everything.
 

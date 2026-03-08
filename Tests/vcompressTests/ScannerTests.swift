@@ -12,7 +12,7 @@ final class ScannerTests: XCTestCase {
     private func makeConfig(
         minSize: Int64? = nil,
         fresh: Bool = false,
-        preset: String = "hevc_highest_quality"
+        preset: String = "hevc_standard"
     ) -> ScanConfig {
         ScanConfig(minSize: minSize, fresh: fresh, preset: preset)
     }
@@ -116,7 +116,7 @@ final class ScannerTests: XCTestCase {
         var state = StateFile()
         state.files["done.mp4"] = StateFileEntry(
             status: .completed,
-            preset: "hevc_highest_quality",
+            preset: "hevc_standard",
             sourceSize: 200_000_000
         )
 
@@ -145,13 +145,13 @@ final class ScannerTests: XCTestCase {
         var state = StateFile()
         state.files["mismatch.mp4"] = StateFileEntry(
             status: .completed,
-            preset: "hevc_highest_quality",
+            preset: "hevc_standard",
             sourceSize: 200_000_000
         )
 
         let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
-        // Current run uses lossless preset, but state has lossy.
-        let config = makeConfig(preset: "hevc_lossless")
+        // Current run uses high preset, but state has standard.
+        let config = makeConfig(preset: "hevc_high")
         let result = try await scanner.scan(
             source: sourceURL, dest: destURL,
             config: config, state: state
@@ -329,7 +329,7 @@ final class ScannerTests: XCTestCase {
         var state = StateFile()
         state.files["done.mp4"] = StateFileEntry(
             status: .completed,
-            preset: "hevc_highest_quality",
+            preset: "hevc_standard",
             sourceSize: 200_000_000
         )
 

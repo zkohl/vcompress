@@ -19,7 +19,7 @@ final class MockExportSessionFactory: ExportSessionFactory {
     var resultsByPath: [String: MockResult] = [:]
 
     /// Track calls for assertions.
-    var exportCalls: [(source: URL, destination: URL, fileType: AVFileType, preset: String)] = []
+    var exportCalls: [(source: URL, destination: URL, fileType: AVFileType, quality: Quality)] = []
 
     /// Optional side effect: write dummy data to the destination to simulate output.
     var writeDummyOutput: Bool = true
@@ -35,13 +35,13 @@ final class MockExportSessionFactory: ExportSessionFactory {
         source: URL,
         destination: URL,
         fileType: AVFileType,
-        preset: String
+        quality: Quality
     ) async throws {
         exportCalls.append((
             source: source,
             destination: destination,
             fileType: fileType,
-            preset: preset
+            quality: quality
         ))
 
         let result = resultsByPath[source.path] ?? defaultResult
