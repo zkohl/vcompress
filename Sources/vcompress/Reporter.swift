@@ -80,6 +80,7 @@ public struct Reporter {
             case .pending:
                 lines.append("  encode  \(file.relativePath)  \(size)\(meta)")
             case .skipped(let reason):
+                if reason == .notVideo { continue }
                 let reasonLabel = Self.skipReasonLabel(reason)
                 lines.append("  skip    \(file.relativePath)  \(size)\(meta)  (\(reasonLabel))")
             }
@@ -91,6 +92,7 @@ public struct Reporter {
     public func formatJSON(_ result: ScanResult, config: Config) -> String {
         var files: [[String: Any]] = []
         for file in result.allFiles {
+            if case .skipped(.notVideo) = file.classification { continue }
             var entry: [String: Any] = [
                 "path": file.relativePath,
                 "sourcePath": file.sourcePath,
