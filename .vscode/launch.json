@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:casablanca}",
+            "name": "Debug vcompress",
+            "target": "vcompress",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug vcompress"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:casablanca}",
+            "name": "Release vcompress",
+            "target": "vcompress",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release vcompress"
+        }
+    ]
+}
