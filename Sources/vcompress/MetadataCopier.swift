@@ -59,7 +59,7 @@ struct MetadataCopier {
         } catch let error as NSError
             where error.domain == NSPOSIXErrorDomain && error.code == Int(ENOATTR)
         {
-            logWarning("Finder tags not present on source: \(source)")
+            // No Finder tags on source — nothing to copy.
         } catch {
             throw error
         }

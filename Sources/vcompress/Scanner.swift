@@ -11,6 +11,9 @@ public struct Scanner {
     /// Supported output containers (lowercased extensions).
     private static let supportedContainers: Set<String> = ["mov", "mp4", "m4v"]
 
+    /// The xattr key used by macOS Finder for user tags.
+    private static let finderTagsXattr = "com.apple.metadata:_kMDItemUserTags"
+
     public init(fs: FileSystemProvider, inspector: AssetInspector, typeID: FileTypeIdentifier) {
         self.fs = fs
         self.inspector = inspector
@@ -66,10 +69,13 @@ public struct Scanner {
                 ?? (attrs?[.size] as? NSNumber)?.int64Value
                 ?? 0
 
+            let sourcePath = url.path
+            let tags = readFinderTags(atPath: sourcePath)
+
             // 1. Not a video (typeID.isMovie returns false) -> skip(notVideo)
             guard typeID.isMovie(at: url) else {
                 skipCounts[.notVideo, default: 0] += 1
-                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.notVideo)))
+                allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(.notVideo), finderTags: tags))
                 continue
             }
 
@@ -78,7 +84,7 @@ public struct Scanner {
             guard Scanner.supportedContainers.contains(ext) else {
                 skipCounts[.unsupportedContainer, default: 0] += 1
                 warnings.append(.unsupportedContainer(path: relativePath, ext: ext))
-                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.unsupportedContainer)))
+                allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(.unsupportedContainer), finderTags: tags))
                 continue
             }
 
@@ -89,20 +95,20 @@ public struct Scanner {
             } catch {
                 warnings.append(.probeFailed(path: relativePath, error: error))
                 skipCounts[.noVideoTrack, default: 0] += 1
-                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.noVideoTrack)))
+                allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(.noVideoTrack), finderTags: tags))
                 continue
             }
 
             if codecs.isEmpty {
                 skipCounts[.noVideoTrack, default: 0] += 1
-                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.noVideoTrack)))
+                allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(.noVideoTrack), finderTags: tags))
                 continue
             }
 
             // 4. Below --min-size -> skip(tooSmall)
             if let minSize = config.minSize, fileSize < minSize {
                 skipCounts[.tooSmall, default: 0] += 1
-                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.tooSmall)))
+                allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(.tooSmall), finderTags: tags))
                 continue
             }
 
@@ -111,7 +117,7 @@ public struct Scanner {
             if codecs.contains(where: { hevcCodecs.contains($0) }) {
                 skipCounts[.alreadyHEVC, default: 0] += 1
                 let info = try? await inspector.videoTrackInfo(forFileAt: url)
-                allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.alreadyHEVC), trackInfo: info))
+                allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(.alreadyHEVC), trackInfo: info, finderTags: tags))
                 continue
             }
 
@@ -137,7 +143,7 @@ public struct Scanner {
                     if bpp < 0.60 && mbPerMin < 150.0 {
                         skipCounts[.alreadyEfficient, default: 0] += 1
                         warnings.append(.efficientlyCompressed(path: relativePath, width: info.width, height: info.height, frameRate: info.frameRate, bpp: bpp, mbPerMin: mbPerMin))
-                        allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.alreadyEfficient), trackInfo: info))
+                        allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(.alreadyEfficient), trackInfo: info, finderTags: tags))
                         continue
                     }
                 }
@@ -152,7 +158,7 @@ public struct Scanner {
                         ? "hevc_standard" : stateEntry.preset
                     if normalizedPreset == config.preset {
                         skipCounts[.alreadyDone, default: 0] += 1
-                        allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .skipped(.alreadyDone), trackInfo: trackInfo))
+                        allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(.alreadyDone), trackInfo: trackInfo, finderTags: tags))
                         continue
                     }
                     // Preset mismatch -- fall through to pending (re-encode).
@@ -166,10 +172,11 @@ public struct Scanner {
                 relativePath: relativePath,
                 destPath: destPath,
                 fileSize: fileSize,
-                sourceContainer: ext
+                sourceContainer: ext,
+                finderTags: tags
             )
             pending.append(fileEntry)
-            allFiles.append(ScannedFile(relativePath: relativePath, fileSize: fileSize, classification: .pending, trackInfo: trackInfo))
+            allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .pending, trackInfo: trackInfo, finderTags: tags))
         }
 
         return ScanResult(
@@ -179,5 +186,22 @@ public struct Scanner {
             totalScanned: totalScanned,
             allFiles: allFiles
         )
+    }
+
+    /// Read Finder tags from a file's extended attributes.
+    /// Returns an empty array if no tags are set or on error.
+    private func readFinderTags(atPath path: String) -> [String] {
+        guard let tagData = try? fs.getExtendedAttribute(Self.finderTagsXattr, atPath: path),
+              let plist = try? PropertyListSerialization.propertyList(from: tagData, options: [], format: nil) as? [String]
+        else {
+            return []
+        }
+        // Tags are stored as "TagName\n<color_index>". Strip the color suffix.
+        return plist.map { tag in
+            if let newlineIndex = tag.firstIndex(of: "\n") {
+                return String(tag[tag.startIndex..<newlineIndex])
+            }
+            return tag
+        }
     }
 }
