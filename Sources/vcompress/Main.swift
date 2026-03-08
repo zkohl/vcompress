@@ -38,6 +38,9 @@ struct VCompress: AsyncParsableCommand {
     @Flag(name: .long, help: "Enable verbose output.")
     var verbose: Bool = false
 
+    @Flag(name: .long, help: "Output scan results as JSON (use with --dry-run).")
+    var json: Bool = false
+
     // MARK: - Validation
 
     func validate() throws {
@@ -180,8 +183,23 @@ struct VCompress: AsyncParsableCommand {
 
         // Print plan
         let reporter = Reporter(clock: clock)
+
+        if json {
+            // JSON mode: output structured data and exit
+            print(reporter.formatJSON(scanResult, config: config))
+            try? processLock.releaseLock()
+            return
+        }
+
         let plan = reporter.formatPlan(scanResult, config: config)
         print(plan)
+
+        // Print per-file scan results
+        let fileList = reporter.formatFileList(scanResult.allFiles)
+        if !fileList.isEmpty {
+            print("")
+            print(fileList)
+        }
 
         // Verbose: print per-file efficiency skip details
         if verbose {

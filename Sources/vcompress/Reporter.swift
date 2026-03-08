@@ -1,4 +1,5 @@
 import Foundation
+import CoreMedia
 
 /// Pure-logic reporting component. Takes data in, produces formatted strings out.
 /// Writing log files to disk is the caller's responsibility.
@@ -63,6 +64,128 @@ public struct Reporter {
         lines.append("  Estimated output: ~\(Self.formatSize(estimate.low))\u{2013}\(Self.formatSize(estimate.high))")
 
         return lines.joined(separator: "\n")
+    }
+
+    // MARK: - File List
+
+    /// Formats a per-file listing of all scanned files with their classification.
+    public func formatFileList(_ files: [ScannedFile]) -> String {
+        guard !files.isEmpty else { return "" }
+
+        var lines: [String] = []
+        for file in files {
+            let size = Self.formatSize(file.fileSize)
+            let meta = Self.formatTrackMeta(file.trackInfo)
+            switch file.classification {
+            case .pending:
+                lines.append("  encode  \(file.relativePath)  \(size)\(meta)")
+            case .skipped(let reason):
+                let reasonLabel = Self.skipReasonLabel(reason)
+                lines.append("  skip    \(file.relativePath)  \(size)\(meta)  (\(reasonLabel))")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Formats a JSON representation of scan results for machine consumption.
+    public func formatJSON(_ result: ScanResult, config: Config) -> String {
+        var files: [[String: Any]] = []
+        for file in result.allFiles {
+            var entry: [String: Any] = [
+                "path": file.relativePath,
+                "size": file.fileSize,
+            ]
+            switch file.classification {
+            case .pending:
+                entry["action"] = "encode"
+            case .skipped(let reason):
+                entry["action"] = "skip"
+                entry["reason"] = Self.skipReasonLabel(reason)
+            }
+            if let info = file.trackInfo {
+                entry["codec"] = Self.formatCodec(info.codec)
+                entry["width"] = info.width
+                entry["height"] = info.height
+                entry["frameRate"] = round(info.frameRate * 10) / 10
+                entry["bitrateMbps"] = round(info.estimatedBitrate / 1_000_000 * 10) / 10
+                if info.width > 0, info.height > 0, info.frameRate > 0, info.estimatedBitrate > 0 {
+                    let bpp = info.estimatedBitrate / (Double(info.width) * Double(info.height) * info.frameRate)
+                    let mbPerMin = info.estimatedBitrate * 60.0 / 8.0 / 1_000_000.0
+                    entry["bpp"] = round(bpp * 100) / 100
+                    entry["mbPerMin"] = round(mbPerMin * 10) / 10
+                }
+            }
+            files.append(entry)
+        }
+
+        var skipSummary: [String: Int] = [:]
+        for (reason, count) in result.skipCounts {
+            skipSummary[Self.skipReasonLabel(reason)] = count
+        }
+
+        let root: [String: Any] = [
+            "source": config.sourceDir.path,
+            "dest": config.destDir.path,
+            "preset": config.quality.rawValue,
+            "files": files,
+            "summary": [
+                "totalScanned": result.totalScanned,
+                "toEncode": result.pending.count,
+                "skipped": skipSummary,
+            ] as [String: Any],
+        ]
+
+        if let data = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]),
+           let json = String(data: data, encoding: .utf8) {
+            return json
+        }
+        return "{}"
+    }
+
+    /// Human-readable label for a skip reason.
+    public static func skipReasonLabel(_ reason: SkipReason) -> String {
+        switch reason {
+        case .alreadyHEVC: return "already HEVC"
+        case .alreadyDone: return "already done"
+        case .tooSmall: return "below min-size"
+        case .alreadyEfficient: return "low bitrate"
+        case .noVideoTrack: return "no video track"
+        case .notVideo: return "not video"
+        case .unsupportedContainer: return "unsupported"
+        }
+    }
+
+    /// Formats video track metadata as a compact suffix string.
+    private static func formatTrackMeta(_ info: VideoTrackInfo?) -> String {
+        guard let info = info else { return "" }
+        let codec = formatCodec(info.codec)
+        let mbps = Int(round(info.estimatedBitrate / 1_000_000))
+        return "  \(codec) \(info.width)x\(info.height) \(Int(info.frameRate))fps \(mbps)Mbps"
+    }
+
+    /// Formats a CMVideoCodecType as a human-readable string.
+    public static func formatCodec(_ codec: CMVideoCodecType) -> String {
+        switch codec {
+        case kCMVideoCodecType_H264: return "H.264"
+        case kCMVideoCodecType_HEVC: return "HEVC"
+        case kCMVideoCodecType_AppleProRes422: return "ProRes 422"
+        case kCMVideoCodecType_AppleProRes4444: return "ProRes 4444"
+        case kCMVideoCodecType_AppleProRes422HQ: return "ProRes 422 HQ"
+        case kCMVideoCodecType_AppleProRes422LT: return "ProRes 422 LT"
+        case kCMVideoCodecType_AppleProRes422Proxy: return "ProRes 422 Proxy"
+        case kCMVideoCodecType_AppleProResRAW: return "ProRes RAW"
+        case kCMVideoCodecType_AppleProResRAWHQ: return "ProRes RAW HQ"
+        default:
+            // Fall back to FourCC string
+            let chars = [
+                UInt8((codec >> 24) & 0xFF),
+                UInt8((codec >> 16) & 0xFF),
+                UInt8((codec >> 8) & 0xFF),
+                UInt8(codec & 0xFF),
+            ]
+            let str = String(bytes: chars, encoding: .ascii) ?? "????"
+            return str
+        }
     }
 
     // MARK: - Progress Line

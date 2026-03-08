@@ -35,17 +35,20 @@ public struct ScanResult {
     public let skipCounts: [SkipReason: Int]
     public let warnings: [ScanWarning]
     public let totalScanned: Int
+    public let allFiles: [ScannedFile]
 
     public init(
         pending: [FileEntry],
         skipCounts: [SkipReason: Int],
         warnings: [ScanWarning],
-        totalScanned: Int
+        totalScanned: Int,
+        allFiles: [ScannedFile] = []
     ) {
         self.pending = pending
         self.skipCounts = skipCounts
         self.warnings = warnings
         self.totalScanned = totalScanned
+        self.allFiles = allFiles
     }
 }
 
@@ -232,6 +235,31 @@ public struct VideoTrackInfo {
         self.frameRate = frameRate
         self.estimatedBitrate = estimatedBitrate
         self.codec = codec
+    }
+}
+
+// MARK: - FileClassification
+
+/// How a scanned file was classified.
+public enum FileClassification {
+    case pending
+    case skipped(SkipReason)
+}
+
+// MARK: - ScannedFile
+
+/// A file encountered during scanning, with its classification.
+public struct ScannedFile {
+    public let relativePath: String
+    public let fileSize: Int64
+    public let classification: FileClassification
+    public let trackInfo: VideoTrackInfo?
+
+    public init(relativePath: String, fileSize: Int64, classification: FileClassification, trackInfo: VideoTrackInfo? = nil) {
+        self.relativePath = relativePath
+        self.fileSize = fileSize
+        self.classification = classification
+        self.trackInfo = trackInfo
     }
 }
 
