@@ -82,12 +82,12 @@ final class CLITests: XCTestCase {
         XCTAssertThrowsError(try validateJobCount(0))
     }
 
-    func test_jobs_9_rejects() {
-        XCTAssertThrowsError(try validateJobCount(9))
+    func test_jobs_65_rejects() {
+        XCTAssertThrowsError(try validateJobCount(65))
     }
 
-    func test_jobs_1through8_passes() {
-        for j in 1...8 {
+    func test_jobs_1through64_passes() {
+        for j in 1...64 {
             XCTAssertNoThrow(try validateJobCount(j), "jobs=\(j) should be valid")
         }
     }

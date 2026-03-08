@@ -26,7 +26,7 @@ vcompress <source-dir> <dest-dir> [options]
 
 | Flag | Description |
 |------|-------------|
-| `--jobs <n>` | Parallel encode jobs, 1-8 (default: auto-detected from chip) |
+| `--jobs <n>` | Parallel encode jobs, 1-64 (default: auto-detected from chip) |
 | `--min-size <size>` | Skip files smaller than this, e.g. `50MB`, `1GB` |
 | `--quality <tier>` | Quality tier: `standard` (default), `high`, or `max` |
 | `--fresh` | Ignore existing state file; re-encode all files |

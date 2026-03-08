@@ -91,9 +91,9 @@ public func resolveJobCount(_ explicit: Int?, sysInfo: SystemInfoProvider) -> In
 /// Validates that an explicit jobs value is within the allowed range of 1-8.
 /// Throws a ValidationError if out of range.
 public func validateJobCount(_ jobs: Int) throws {
-    guard jobs >= 1, jobs <= 8 else {
+    guard jobs >= 1, jobs <= 64 else {
         throw ValidationError(
-            "Invalid --jobs value '\(jobs)'. Must be between 1 and 8."
+            "Invalid --jobs value '\(jobs)'. Must be between 1 and 64."
         )
     }
 }
