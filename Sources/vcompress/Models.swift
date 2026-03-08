@@ -241,5 +241,5 @@ public struct VideoTrackInfo {
 public enum ScanWarning {
     case unsupportedContainer(path: String, ext: String)
     case probeFailed(path: String, error: Error)
-    case efficientlyCompressed(path: String, bpp: Double, mbPerMin: Double)
+    case efficientlyCompressed(path: String, width: Int, height: Int, frameRate: Double, bpp: Double, mbPerMin: Double)
 }
