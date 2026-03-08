@@ -10,6 +10,9 @@ final class MockAssetInspector: AssetInspector {
     /// Empty array = audio-only. Missing key = file not found (throws).
     var codecs: [String: [CMVideoCodecType]] = [:]
 
+    /// Map of file path -> video track info for efficiency checks.
+    var trackInfo: [String: VideoTrackInfo] = [:]
+
     /// Map of file path -> playability result.
     var playability: [String: Bool] = [:]
 
@@ -27,6 +30,10 @@ final class MockAssetInspector: AssetInspector {
             )
         }
         return result
+    }
+
+    func videoTrackInfo(forFileAt url: URL) async throws -> VideoTrackInfo? {
+        return trackInfo[url.path]
     }
 
     func isPlayable(at url: URL) async throws -> Bool {

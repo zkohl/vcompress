@@ -106,6 +106,32 @@ public struct Scanner {
                 continue
             }
 
+            // 5.5. Already efficiently compressed -> skip(alreadyEfficient)
+            if let info = try? await inspector.videoTrackInfo(forFileAt: url) {
+                let isProRes = [
+                    kCMVideoCodecType_AppleProRes4444,
+                    kCMVideoCodecType_AppleProRes422,
+                    kCMVideoCodecType_AppleProRes422HQ,
+                    kCMVideoCodecType_AppleProRes422LT,
+                    kCMVideoCodecType_AppleProRes422Proxy,
+                    kCMVideoCodecType_AppleProResRAW,
+                    kCMVideoCodecType_AppleProResRAWHQ
+                ].contains(info.codec)
+
+                if !isProRes,
+                   info.width > 0, info.height > 0, info.frameRate > 0,
+                   info.estimatedBitrate > 0
+                {
+                    let bpp = info.estimatedBitrate / (Double(info.width) * Double(info.height) * info.frameRate)
+                    let mbPerMin = info.estimatedBitrate * 60.0 / 8.0 / 1_000_000.0
+                    if bpp < 0.60 && mbPerMin < 150.0 {
+                        skipCounts[.alreadyEfficient, default: 0] += 1
+                        warnings.append(.efficientlyCompressed(path: relativePath, bpp: bpp, mbPerMin: mbPerMin))
+                        continue
+                    }
+                }
+            }
+
             // 6. State-aware skip logic
             if !config.fresh, let state = state, let stateEntry = state.files[relativePath] {
                 if stateEntry.status == .completed {

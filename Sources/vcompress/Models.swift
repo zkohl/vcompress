@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CoreMedia
 
 // MARK: - FileEntry
 
@@ -56,6 +57,7 @@ public enum SkipReason: Hashable {
     case noVideoTrack
     case tooSmall
     case alreadyHEVC
+    case alreadyEfficient
     case alreadyDone
     case unsupportedContainer
 }
@@ -214,10 +216,30 @@ public enum EncodingError: Error {
     case diskFull
 }
 
+// MARK: - VideoTrackInfo
+
+/// Metadata about a video file's first video track, used for efficiency heuristics.
+public struct VideoTrackInfo {
+    public let width: Int
+    public let height: Int
+    public let frameRate: Double
+    public let estimatedBitrate: Double
+    public let codec: CMVideoCodecType
+
+    public init(width: Int, height: Int, frameRate: Double, estimatedBitrate: Double, codec: CMVideoCodecType) {
+        self.width = width
+        self.height = height
+        self.frameRate = frameRate
+        self.estimatedBitrate = estimatedBitrate
+        self.codec = codec
+    }
+}
+
 // MARK: - ScanWarning
 
 /// Warnings generated during scanning that don't prevent progress but should be reported.
 public enum ScanWarning {
     case unsupportedContainer(path: String, ext: String)
     case probeFailed(path: String, error: Error)
+    case efficientlyCompressed(path: String, bpp: Double, mbPerMin: Double)
 }
