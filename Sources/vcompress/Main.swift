@@ -224,7 +224,7 @@ struct VCompress: AsyncParsableCommand {
 
         // Encoding loop
         let encoder = Encoder(factory: exportFactory, fs: fs, inspector: inspector)
-        let metadataCopier = MetadataCopier(fs: fs)
+        let metadataCopier = MetadataCopier(fs: fs, clock: RealClock())
         let pendingFiles = scanResult.pending
         let totalFiles = pendingFiles.count
         let totalSkipped = scanResult.skipCounts.values.reduce(0, +)
@@ -383,6 +383,15 @@ private func processFile(
         } else {
             outputSize = 0
         }
+
+        // Stamp vcompress metadata
+        try metadataCopier.stampVcompress(
+            atPath: entry.destPath,
+            quality: quality,
+            preset: preset,
+            originalSize: entry.fileSize,
+            compressedSize: outputSize
+        )
 
         // Mark completed
         try await stateManager.markCompleted(
