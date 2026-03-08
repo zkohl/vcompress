@@ -186,8 +186,8 @@ struct VCompress: AsyncParsableCommand {
         // Verbose: print per-file efficiency skip details
         if verbose {
             for warning in scanResult.warnings {
-                if case .efficientlyCompressed(let path, let bpp, let mbPerMin) = warning {
-                    fputs("  skip: \(path) — already efficient (\(String(format: "%.2f", bpp)) bpp, \(Int(mbPerMin)) MB/min)\n", stderr)
+                if case .efficientlyCompressed(let path, let width, let height, let frameRate, let bpp, let mbPerMin) = warning {
+                    fputs("  skip: \(path) — already efficient (\(width)×\(height) \(Int(frameRate))fps, \(String(format: "%.2f", bpp)) bpp, \(Int(mbPerMin)) MB/min)\n", stderr)
                 }
             }
         }

@@ -126,7 +126,7 @@ public struct Scanner {
                     let mbPerMin = info.estimatedBitrate * 60.0 / 8.0 / 1_000_000.0
                     if bpp < 0.60 && mbPerMin < 150.0 {
                         skipCounts[.alreadyEfficient, default: 0] += 1
-                        warnings.append(.efficientlyCompressed(path: relativePath, bpp: bpp, mbPerMin: mbPerMin))
+                        warnings.append(.efficientlyCompressed(path: relativePath, width: info.width, height: info.height, frameRate: info.frameRate, bpp: bpp, mbPerMin: mbPerMin))
                         continue
                     }
                 }
