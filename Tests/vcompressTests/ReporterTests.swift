@@ -307,4 +307,92 @@ final class ReporterTests: XCTestCase {
         XCTAssertEqual(Reporter.formatTime(8077), "2h 14m 37s")
         XCTAssertEqual(Reporter.formatTime(86400), "24h 0m 0s")
     }
+
+    // MARK: - Skip Reason Labels (new cases)
+
+    func test_skipReasonLabel_excludedByTag() {
+        XCTAssertEqual(Reporter.skipReasonLabel(.excludedByTag), "excluded by tag")
+    }
+
+    func test_skipReasonLabel_missingTag() {
+        XCTAssertEqual(Reporter.skipReasonLabel(.missingTag), "missing tag")
+    }
+
+    // MARK: - Copy Mode Plan
+
+    func test_formatCopyPlan_displaysCorrectly() {
+        let entries = [
+            FileEntry(
+                sourcePath: "/src/photo.jpg",
+                relativePath: "photo.jpg",
+                destPath: "/dst/photo.jpg",
+                fileSize: 5_000_000,
+                sourceContainer: "jpg"
+            ),
+            FileEntry(
+                sourcePath: "/src/video.mp4",
+                relativePath: "video.mp4",
+                destPath: "/dst/video.mp4",
+                fileSize: 500_000_000,
+                sourceContainer: "mp4"
+            ),
+        ]
+
+        let result = ScanResult(
+            pending: entries,
+            skipCounts: [
+                .excludedByTag: 3,
+                .missingTag: 1,
+            ],
+            warnings: [],
+            totalScanned: 6
+        )
+
+        let clock = makeClock()
+        let reporter = Reporter(clock: clock)
+        let config = makeConfig()
+        let plan = reporter.formatCopyPlan(result, config: config)
+
+        XCTAssert(plan.contains("vcompress copy plan"),
+            "Copy plan should contain header. Got:\n\(plan)")
+        XCTAssert(plan.contains("Files to copy:       2"),
+            "Copy plan should show pending count. Got:\n\(plan)")
+        XCTAssert(plan.contains("Total scanned:       6"),
+            "Copy plan should show total scanned. Got:\n\(plan)")
+        XCTAssert(plan.contains("Excluded by tag:"),
+            "Copy plan should show excluded by tag count. Got:\n\(plan)")
+        XCTAssert(plan.contains("Missing tag:"),
+            "Copy plan should show missing tag count. Got:\n\(plan)")
+    }
+
+    // MARK: - Copy Mode Summary
+
+    func test_formatCopySummary_displaysCorrectly() {
+        let clock = makeClock()
+        let reporter = Reporter(clock: clock)
+
+        let summary = reporter.formatCopySummary(
+            copied: 42,
+            skipped: 5,
+            failed: 1,
+            totalSize: 1_073_741_824,  // 1 GB
+            overwrittenCount: 3,
+            wallTime: 120
+        )
+
+        XCTAssert(summary.contains("vcompress copy complete"),
+            "Copy summary should contain header. Got:\n\(summary)")
+        XCTAssert(summary.contains("42"),
+            "Copy summary should show copied count. Got:\n\(summary)")
+        XCTAssert(summary.contains("5"),
+            "Copy summary should show skipped count. Got:\n\(summary)")
+        XCTAssert(summary.contains("1"),
+            "Copy summary should show failed count. Got:\n\(summary)")
+        XCTAssert(summary.contains("1.0 GB"),
+            "Copy summary should show total size. Got:\n\(summary)")
+        XCTAssert(summary.contains("2m 0s"),
+            "Copy summary should show wall time. Got:\n\(summary)")
+        XCTAssert(summary.contains("Overwritten:"),
+            "Copy summary should show overwritten count when > 0. Got:\n\(summary)")
+    }
 }

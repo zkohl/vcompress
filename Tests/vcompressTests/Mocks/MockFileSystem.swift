@@ -19,6 +19,7 @@ final class MockFileSystem: FileSystemProvider {
     var writtenFiles: [(url: URL, data: Data, atomically: Bool)] = []
     var removedItems: [URL] = []
     var movedItems: [(from: URL, to: URL)] = []
+    var copiedItems: [(from: URL, to: URL)] = []
     var createdDirectories: [URL] = []
     var setAttributesCalls: [(attrs: [FileAttributeKey: Any], path: String)] = []
 
@@ -32,6 +33,7 @@ final class MockFileSystem: FileSystemProvider {
     var errorOnRead: [String: Error] = [:]
     var errorOnRemove: [String: Error] = [:]
     var errorOnMove: [String: Error] = [:]
+    var errorOnCopy: [String: Error] = [:]
 
     // MARK: - Helper methods
 
@@ -164,6 +166,17 @@ final class MockFileSystem: FileSystemProvider {
         if let entry = files[srcPath] {
             files[dst.path] = entry
             files.removeValue(forKey: srcPath)
+        }
+    }
+
+    func copyItem(at src: URL, to dst: URL) throws {
+        let srcPath = src.path
+        if let error = errorOnCopy[srcPath] {
+            throw error
+        }
+        copiedItems.append((from: src, to: dst))
+        if let entry = files[srcPath] {
+            files[dst.path] = entry
         }
     }
 

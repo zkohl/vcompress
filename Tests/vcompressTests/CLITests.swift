@@ -129,4 +129,26 @@ final class CLITests: XCTestCase {
         // Auto would be 3, but explicit 5 should be returned as-is
         XCTAssertEqual(resolveJobCount(5, sysInfo: sysInfo), 5)
     }
+
+    // MARK: - parseTagList Tests
+
+    func test_parseTagList_commas() {
+        let result = parseTagList("Red,Blue")
+        XCTAssertEqual(result, ["Red", "Blue"])
+    }
+
+    func test_parseTagList_whitespace() {
+        let result = parseTagList(" Red , Blue ")
+        XCTAssertEqual(result, ["Red", "Blue"])
+    }
+
+    func test_parseTagList_nil() {
+        let result = parseTagList(nil)
+        XCTAssertNil(result)
+    }
+
+    func test_parseTagList_empty() {
+        let result = parseTagList("")
+        XCTAssertNil(result)
+    }
 }

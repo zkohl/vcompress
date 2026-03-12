@@ -86,6 +86,15 @@ public func resolveJobCount(_ explicit: Int?, sysInfo: SystemInfoProvider) -> In
     return 2
 }
 
+// MARK: - Tag List Parsing
+
+/// Parses a comma-separated tag string into an array of trimmed tag names.
+/// Returns nil if the input is nil or empty.
+public func parseTagList(_ raw: String?) -> [String]? {
+    guard let raw = raw, !raw.isEmpty else { return nil }
+    return raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+}
+
 // MARK: - Jobs Validation
 
 /// Validates that an explicit jobs value is within the allowed range of 1-8.

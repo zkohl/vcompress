@@ -72,6 +72,13 @@ public struct Scanner {
             let sourcePath = url.path
             let tags = readFinderTags(atPath: sourcePath)
 
+            // 0. Tag filtering (applies before video classification)
+            if let skipReason = shouldSkipForTags(tags: tags, ignoreTags: config.ignoreTags, includeTags: config.includeTags) {
+                skipCounts[skipReason, default: 0] += 1
+                allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(skipReason), finderTags: tags))
+                continue
+            }
+
             // 1. Not a video (typeID.isMovie returns false) -> skip(notVideo)
             guard typeID.isMovie(at: url) else {
                 skipCounts[.notVideo, default: 0] += 1
@@ -188,9 +195,98 @@ public struct Scanner {
         )
     }
 
+    /// Scans the source directory for copy mode, including all file types.
+    /// Applies only hidden file, symlink, and tag filtering.
+    public func scanForCopy(
+        source: URL,
+        dest: URL,
+        config: ScanConfig
+    ) async throws -> ScanResult {
+        let entries = try fs.enumerateFiles(
+            at: source,
+            includingPropertiesForKeys: [.isSymbolicLinkKey, .fileSizeKey]
+        )
+
+        var pending: [FileEntry] = []
+        var skipCounts: [SkipReason: Int] = [:]
+        var allFiles: [ScannedFile] = []
+        var totalScanned = 0
+
+        for entry in entries {
+            let url = entry.url
+            let relativePath = entry.relativePath
+            let filename = url.lastPathComponent
+
+            // Skip hidden files and .DS_Store
+            if filename.hasPrefix(".") || filename == ".DS_Store" {
+                continue
+            }
+
+            // Skip symlinks
+            let resourceValues = try? url.resourceValues(forKeys: [.isSymbolicLinkKey])
+            if resourceValues?.isSymbolicLink == true {
+                continue
+            }
+
+            let attrs = try? fs.attributesOfItem(atPath: url.path)
+            totalScanned += 1
+
+            let fileSize = (attrs?[.size] as? Int64)
+                ?? (attrs?[.size] as? NSNumber)?.int64Value
+                ?? 0
+
+            let sourcePath = url.path
+            let tags = readFinderTags(atPath: sourcePath)
+
+            // Tag filtering
+            if let skipReason = shouldSkipForTags(tags: tags, ignoreTags: config.ignoreTags, includeTags: config.includeTags) {
+                skipCounts[skipReason, default: 0] += 1
+                allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .skipped(skipReason), finderTags: tags))
+                continue
+            }
+
+            let destPath = dest.appendingPathComponent(relativePath).path
+            let ext = url.pathExtension.lowercased()
+            let fileEntry = FileEntry(
+                sourcePath: sourcePath,
+                relativePath: relativePath,
+                destPath: destPath,
+                fileSize: fileSize,
+                sourceContainer: ext,
+                finderTags: tags
+            )
+            pending.append(fileEntry)
+            allFiles.append(ScannedFile(sourcePath: sourcePath, relativePath: relativePath, fileSize: fileSize, classification: .pending, finderTags: tags))
+        }
+
+        return ScanResult(
+            pending: pending,
+            skipCounts: skipCounts,
+            warnings: [],
+            totalScanned: totalScanned,
+            allFiles: allFiles
+        )
+    }
+
+    /// Checks if a file should be skipped based on tag filters.
+    /// Returns the appropriate SkipReason if the file should be skipped, nil otherwise.
+    func shouldSkipForTags(tags: [String], ignoreTags: [String]?, includeTags: [String]?) -> SkipReason? {
+        if let ignore = ignoreTags {
+            if tags.contains(where: { ignore.contains($0) }) {
+                return .excludedByTag
+            }
+        }
+        if let include = includeTags {
+            if !tags.contains(where: { include.contains($0) }) {
+                return .missingTag
+            }
+        }
+        return nil
+    }
+
     /// Read Finder tags from a file's extended attributes.
     /// Returns an empty array if no tags are set or on error.
-    private func readFinderTags(atPath path: String) -> [String] {
+    func readFinderTags(atPath path: String) -> [String] {
         guard let tagData = try? fs.getExtendedAttribute(Self.finderTagsXattr, atPath: path),
               let plist = try? PropertyListSerialization.propertyList(from: tagData, options: [], format: nil) as? [String]
         else {

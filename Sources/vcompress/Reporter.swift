@@ -49,6 +49,8 @@ public struct Reporter {
             (.noVideoTrack, "No video track:"),
             (.notVideo, "Not video:"),
             (.unsupportedContainer, "Unsupported:"),
+            (.excludedByTag, "Excluded by tag:"),
+            (.missingTag, "Missing tag:"),
         ]
         for (reason, label) in skipOrder {
             let count = result.skipCounts[reason] ?? 0
@@ -156,6 +158,8 @@ public struct Reporter {
         case .noVideoTrack: return "no video track"
         case .notVideo: return "not video"
         case .unsupportedContainer: return "unsupported"
+        case .excludedByTag: return "excluded by tag"
+        case .missingTag: return "missing tag"
         }
     }
 
@@ -190,6 +194,101 @@ public struct Reporter {
             let str = String(bytes: chars, encoding: .ascii) ?? "????"
             return str
         }
+    }
+
+    // MARK: - Copy Mode Plan
+
+    /// Formats the plan summary for copy mode.
+    public func formatCopyPlan(_ result: ScanResult, config: Config) -> String {
+        let pendingSize = result.pending.reduce(Int64(0)) { $0 + $1.fileSize }
+
+        var lines: [String] = []
+        lines.append("vcompress copy plan")
+        lines.append("  Source: \(config.sourceDir.path)")
+        lines.append("  Dest:   \(config.destDir.path)")
+        lines.append("  Jobs:   \(config.jobs)")
+        lines.append("")
+
+        let pendingSizeStr = Self.formatSize(pendingSize)
+        lines.append("  Files to copy:     \(String(format: "%3d", result.pending.count))   (\(pendingSizeStr))")
+
+        let skipOrder: [(SkipReason, String)] = [
+            (.excludedByTag, "Excluded by tag:"),
+            (.missingTag, "Missing tag:"),
+        ]
+        for (reason, label) in skipOrder {
+            let count = result.skipCounts[reason] ?? 0
+            if count > 0 {
+                lines.append("  \(label.padding(toLength: 18, withPad: " ", startingAt: 0))\(String(format: "%4d", count))")
+            }
+        }
+
+        let separator = String(repeating: "\u{2500}", count: 33)
+        lines.append("  \(separator)")
+        lines.append("  Total scanned:     \(String(format: "%3d", result.totalScanned))")
+
+        return lines.joined(separator: "\n")
+    }
+
+    /// Formats the per-file listing for copy mode.
+    public func formatCopyFileList(_ files: [ScannedFile], fs: FileSystemProvider, destDir: URL) -> String {
+        guard !files.isEmpty else { return "" }
+
+        var lines: [String] = []
+        for file in files {
+            let size = Self.formatSize(file.fileSize)
+            switch file.classification {
+            case .pending:
+                let destPath = destDir.appendingPathComponent(file.relativePath).path
+                let exists = fs.fileExists(atPath: destPath)
+                let suffix = exists ? "  (overwrite)" : ""
+                lines.append("  copy    \(file.relativePath)  \(size)\(suffix)")
+            case .skipped(let reason):
+                let reasonLabel = Self.skipReasonLabel(reason)
+                lines.append("  skip    \(file.relativePath)  \(size)  (\(reasonLabel))")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Formats a single progress line for a copied file.
+    public func formatCopyProgress(
+        index: Int,
+        total: Int,
+        path: String,
+        fileSize: Int64,
+        overwritten: Bool
+    ) -> String {
+        let totalWidth = String(total).count
+        let indexStr = String(index).leftPadded(toLength: totalWidth)
+        let sizeStr = Self.formatSize(fileSize)
+        let suffix = overwritten ? "  (overwritten)" : ""
+
+        return "[\(indexStr)/\(total)]  copied  \(path)  \(sizeStr)\(suffix)"
+    }
+
+    /// Formats the completion summary for copy mode.
+    public func formatCopySummary(
+        copied: Int,
+        skipped: Int,
+        failed: Int,
+        totalSize: Int64,
+        overwrittenCount: Int,
+        wallTime: TimeInterval
+    ) -> String {
+        var lines: [String] = []
+        lines.append("vcompress copy complete")
+        lines.append("  Copied:      \(String(format: "%5d", copied)) files")
+        if overwrittenCount > 0 {
+            lines.append("  Overwritten: \(String(format: "%5d", overwrittenCount)) files")
+        }
+        lines.append("  Skipped:     \(String(format: "%5d", skipped)) files")
+        lines.append("  Failed:      \(String(format: "%5d", failed)) files")
+        lines.append("")
+        lines.append("  Total size:  \(Self.formatSize(totalSize))")
+        lines.append("  Wall time:   \(Self.formatTime(wallTime))")
+
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Encoding Start Line

@@ -473,6 +473,211 @@ final class ScannerTests: XCTestCase {
         XCTAssertNil(result.skipCounts[.alreadyEfficient])
     }
 
+    // MARK: - Tag Filtering Tests
+
+    func test_ignoreTagsSkipsMatchingFiles() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/video.mp4", size: 500_000_000)
+
+        // Set Finder tag "Compressed" on the file
+        let tags = ["Compressed\n0"]
+        let data = try PropertyListSerialization.data(fromPropertyList: tags, format: .binary, options: 0)
+        fs.xattrs["/source/video.mp4"] = ["com.apple.metadata:_kMDItemUserTags": data]
+
+        let typeID = MockFileTypeIdentifier()
+        typeID.movieFiles = ["video.mp4"]
+
+        let inspector = MockAssetInspector()
+        inspector.codecs["/source/video.mp4"] = [kCMVideoCodecType_H264]
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let config = ScanConfig(ignoreTags: ["Compressed"])
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: config
+        )
+
+        XCTAssertEqual(result.pending.count, 0)
+        XCTAssertEqual(result.skipCounts[.excludedByTag], 1)
+    }
+
+    func test_ignoreTagsAllowsUnmatchedFiles() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/video.mp4", size: 500_000_000)
+
+        // Set Finder tag "Red" on the file
+        let tags = ["Red\n6"]
+        let data = try PropertyListSerialization.data(fromPropertyList: tags, format: .binary, options: 0)
+        fs.xattrs["/source/video.mp4"] = ["com.apple.metadata:_kMDItemUserTags": data]
+
+        let typeID = MockFileTypeIdentifier()
+        typeID.movieFiles = ["video.mp4"]
+
+        let inspector = MockAssetInspector()
+        inspector.codecs["/source/video.mp4"] = [kCMVideoCodecType_H264]
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let config = ScanConfig(ignoreTags: ["Compressed"])
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: config
+        )
+
+        XCTAssertEqual(result.pending.count, 1)
+        XCTAssertNil(result.skipCounts[.excludedByTag])
+    }
+
+    func test_includeTagsOnlyIncludesMatching() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/video.mp4", size: 500_000_000)
+        // No tags set on the file
+
+        let typeID = MockFileTypeIdentifier()
+        typeID.movieFiles = ["video.mp4"]
+
+        let inspector = MockAssetInspector()
+        inspector.codecs["/source/video.mp4"] = [kCMVideoCodecType_H264]
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let config = ScanConfig(includeTags: ["Processed"])
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: config
+        )
+
+        XCTAssertEqual(result.pending.count, 0)
+        XCTAssertEqual(result.skipCounts[.missingTag], 1)
+    }
+
+    func test_includeTagsPassesMatchingFile() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/video.mp4", size: 500_000_000)
+
+        let tags = ["Processed\n0"]
+        let data = try PropertyListSerialization.data(fromPropertyList: tags, format: .binary, options: 0)
+        fs.xattrs["/source/video.mp4"] = ["com.apple.metadata:_kMDItemUserTags": data]
+
+        let typeID = MockFileTypeIdentifier()
+        typeID.movieFiles = ["video.mp4"]
+
+        let inspector = MockAssetInspector()
+        inspector.codecs["/source/video.mp4"] = [kCMVideoCodecType_H264]
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let config = ScanConfig(includeTags: ["Processed"])
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: config
+        )
+
+        XCTAssertEqual(result.pending.count, 1)
+        XCTAssertNil(result.skipCounts[.missingTag])
+    }
+
+    func test_tagFilteringBeforeVideoClassification() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/notes.txt", size: 1_000)
+
+        // Set a tag that matches ignoreTags
+        let tags = ["Compressed\n0"]
+        let data = try PropertyListSerialization.data(fromPropertyList: tags, format: .binary, options: 0)
+        fs.xattrs["/source/notes.txt"] = ["com.apple.metadata:_kMDItemUserTags": data]
+
+        let typeID = MockFileTypeIdentifier()
+        // notes.txt is NOT a movie
+        typeID.movieFiles = []
+
+        let inspector = MockAssetInspector()
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let config = ScanConfig(ignoreTags: ["Compressed"])
+        let result = try await scanner.scan(
+            source: sourceURL, dest: destURL, config: config
+        )
+
+        // Should be skipped as excludedByTag, NOT notVideo (tag filter runs first)
+        XCTAssertEqual(result.skipCounts[.excludedByTag], 1,
+            "Non-video file with matching ignore tag should be skipped as excludedByTag")
+        XCTAssertNil(result.skipCounts[.notVideo],
+            "Tag filtering should run before video classification")
+    }
+
+    // MARK: - scanForCopy Tests
+
+    func test_scanForCopy_includesAllFileTypes() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/notes.txt", size: 1_000)
+        fs.addFile(path: "/source/video.mp4", size: 500_000_000)
+
+        let typeID = MockFileTypeIdentifier()
+        let inspector = MockAssetInspector()
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let config = ScanConfig()
+        let result = try await scanner.scanForCopy(
+            source: sourceURL, dest: destURL, config: config
+        )
+
+        XCTAssertEqual(result.pending.count, 2,
+            "scanForCopy should include both .txt and .mp4 files")
+        XCTAssertEqual(result.totalScanned, 2)
+    }
+
+    func test_scanForCopy_skipsHiddenFiles() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/.hidden_file", size: 1_000)
+        fs.addFile(path: "/source/visible.txt", size: 2_000)
+
+        let typeID = MockFileTypeIdentifier()
+        let inspector = MockAssetInspector()
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let config = ScanConfig()
+        let result = try await scanner.scanForCopy(
+            source: sourceURL, dest: destURL, config: config
+        )
+
+        XCTAssertEqual(result.pending.count, 1)
+        XCTAssertEqual(result.pending[0].relativePath, "visible.txt")
+        XCTAssertEqual(result.totalScanned, 1,
+            "Hidden files should not be counted in totalScanned")
+    }
+
+    func test_scanForCopy_respectsIgnoreTags() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/file.txt", size: 1_000)
+
+        let tags = ["Archived\n0"]
+        let data = try PropertyListSerialization.data(fromPropertyList: tags, format: .binary, options: 0)
+        fs.xattrs["/source/file.txt"] = ["com.apple.metadata:_kMDItemUserTags": data]
+
+        let typeID = MockFileTypeIdentifier()
+        let inspector = MockAssetInspector()
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let config = ScanConfig(ignoreTags: ["Archived"])
+        let result = try await scanner.scanForCopy(
+            source: sourceURL, dest: destURL, config: config
+        )
+
+        XCTAssertEqual(result.pending.count, 0)
+        XCTAssertEqual(result.skipCounts[.excludedByTag], 1)
+    }
+
+    func test_scanForCopy_respectsIncludeTags() async throws {
+        let fs = MockFileSystem()
+        fs.addFile(path: "/source/file.txt", size: 1_000)
+        // No tags set
+
+        let typeID = MockFileTypeIdentifier()
+        let inspector = MockAssetInspector()
+
+        let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+        let config = ScanConfig(includeTags: ["Important"])
+        let result = try await scanner.scanForCopy(
+            source: sourceURL, dest: destURL, config: config
+        )
+
+        XCTAssertEqual(result.pending.count, 0)
+        XCTAssertEqual(result.skipCounts[.missingTag], 1)
+    }
+
     // MARK: - test_multipleFiles_correctCounts
 
     func test_multipleFiles_correctCounts() async throws {
