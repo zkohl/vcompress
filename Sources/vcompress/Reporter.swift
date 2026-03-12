@@ -192,6 +192,14 @@ public struct Reporter {
         }
     }
 
+    // MARK: - Encoding Start Line
+
+    /// Formats a line printed when a file begins encoding.
+    public func formatStarting(path: String, inputSize: Int64) -> String {
+        let size = Self.formatSize(inputSize)
+        return "  encoding  \(path)  (\(size))"
+    }
+
     // MARK: - Progress Line
 
     /// Formats a single progress line for a completed file.
