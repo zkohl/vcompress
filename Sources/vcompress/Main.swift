@@ -267,6 +267,8 @@ struct VCompress: AsyncParsableCommand {
         let startTime = Date()
         var diskFullDetected = false
 
+        print("\nEncoding \(totalFiles) file\(totalFiles == 1 ? "" : "s") with \(resolvedJobs) parallel job\(resolvedJobs == 1 ? "" : "s")...\n")
+
         // Bounded TaskGroup dispatch loop per spec section 7
         await withTaskGroup(of: Void.self) { group in
             var iterator = pendingFiles.makeIterator()
@@ -406,6 +408,9 @@ private func processFile(
     )
 
     do {
+        // Print starting line
+        print(reporter.formatStarting(path: entry.relativePath, inputSize: entry.fileSize))
+
         // Encode
         try await encoder.encode(entry, quality: quality)
 
