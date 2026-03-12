@@ -43,6 +43,9 @@ public protocol FileSystemProvider {
     /// Move/rename a file.
     func moveItem(at src: URL, to dst: URL) throws
 
+    /// Copy a file.
+    func copyItem(at src: URL, to dst: URL) throws
+
     /// Read an extended attribute (xattr) from a file.
     func getExtendedAttribute(
         _ name: String,

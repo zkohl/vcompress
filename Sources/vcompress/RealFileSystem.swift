@@ -94,6 +94,10 @@ struct RealFileSystem: FileSystemProvider {
         try fm.moveItem(at: src, to: dst)
     }
 
+    func copyItem(at src: URL, to dst: URL) throws {
+        try fm.copyItem(at: src, to: dst)
+    }
+
     func getExtendedAttribute(
         _ name: String,
         atPath path: String

@@ -1,6 +1,15 @@
 import Foundation
 import AVFoundation
 import CoreMedia
+import ArgumentParser
+
+// MARK: - OperatingMode
+
+/// The operating mode for vcompress.
+public enum OperatingMode: String, CaseIterable, Codable, ExpressibleByArgument {
+    case encode
+    case copy
+}
 
 // MARK: - FileEntry
 
@@ -66,6 +75,8 @@ public enum SkipReason: Hashable {
     case alreadyEfficient
     case alreadyDone
     case unsupportedContainer
+    case excludedByTag
+    case missingTag
 }
 
 // MARK: - FileStatus
@@ -120,6 +131,9 @@ public struct Config {
     public let dryRun: Bool
     public let fresh: Bool
     public let verbose: Bool
+    public let mode: OperatingMode
+    public let ignoreTags: [String]?
+    public let includeTags: [String]?
 
     public init(
         sourceDir: URL,
@@ -130,7 +144,10 @@ public struct Config {
         yes: Bool = false,
         dryRun: Bool = false,
         fresh: Bool = false,
-        verbose: Bool = false
+        verbose: Bool = false,
+        mode: OperatingMode = .encode,
+        ignoreTags: [String]? = nil,
+        includeTags: [String]? = nil
     ) {
         self.sourceDir = sourceDir
         self.destDir = destDir
@@ -141,6 +158,9 @@ public struct Config {
         self.dryRun = dryRun
         self.fresh = fresh
         self.verbose = verbose
+        self.mode = mode
+        self.ignoreTags = ignoreTags
+        self.includeTags = includeTags
     }
 }
 
@@ -151,11 +171,15 @@ public struct ScanConfig {
     public let minSize: Int64?
     public let fresh: Bool
     public let preset: String
+    public let ignoreTags: [String]?
+    public let includeTags: [String]?
 
-    public init(minSize: Int64? = nil, fresh: Bool = false, preset: String = "hevc_standard") {
+    public init(minSize: Int64? = nil, fresh: Bool = false, preset: String = "hevc_standard", ignoreTags: [String]? = nil, includeTags: [String]? = nil) {
         self.minSize = minSize
         self.fresh = fresh
         self.preset = preset
+        self.ignoreTags = ignoreTags
+        self.includeTags = includeTags
     }
 }
 

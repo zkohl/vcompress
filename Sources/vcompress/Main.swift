@@ -17,6 +17,9 @@ struct VCompress: AsyncParsableCommand {
     @Argument(help: "Destination directory for encoded output.")
     var destDir: String
 
+    @Option(name: .long, help: "Operating mode: encode (default) or copy.")
+    var mode: OperatingMode = .encode
+
     @Option(name: .long, help: "Parallel encode jobs (default: auto).")
     var jobs: Int?
 
@@ -25,6 +28,12 @@ struct VCompress: AsyncParsableCommand {
 
     @Option(name: .long, help: "Quality tier: standard (default), high, very-high, or max.")
     var quality: Quality = .standard
+
+    @Option(name: .long, help: "Skip files with any of these Finder tags (comma-separated).")
+    var ignoreTags: String?
+
+    @Option(name: .long, help: "Only include files with any of these Finder tags (comma-separated).")
+    var includeTags: String?
 
     @Flag(name: .long, help: "Skip confirmation prompt.")
     var yes: Bool = false
@@ -92,6 +101,11 @@ struct VCompress: AsyncParsableCommand {
         if let ms = minSize {
             _ = try parseMinSize(ms)
         }
+
+        // --ignore-tags and --include-tags are mutually exclusive
+        if ignoreTags != nil && includeTags != nil {
+            throw ValidationError("--ignore-tags and --include-tags are mutually exclusive.")
+        }
     }
 
     // MARK: - Run
@@ -108,6 +122,10 @@ struct VCompress: AsyncParsableCommand {
         let sysInfo = RealSystemInfo()
         let resolvedJobs = resolveJobCount(jobs, sysInfo: sysInfo)
 
+        // Parse tag filters
+        let parsedIgnoreTags = parseTagList(ignoreTags)
+        let parsedIncludeTags = parseTagList(includeTags)
+
         // Build Config
         let config = Config(
             sourceDir: sourceURL,
@@ -118,9 +136,28 @@ struct VCompress: AsyncParsableCommand {
             yes: yes,
             dryRun: dryRun,
             fresh: fresh,
-            verbose: verbose
+            verbose: verbose,
+            mode: mode,
+            ignoreTags: parsedIgnoreTags,
+            includeTags: parsedIncludeTags
         )
 
+        // Install signal handler
+        installSignalHandler()
+
+        // Create real implementations
+        let fs = RealFileSystem()
+        let clock = RealClock()
+        let inspector = RealAssetInspector()
+        let typeID = RealFileTypeIdentifier()
+
+        // Branch by mode
+        if config.mode == .copy {
+            try await runCopyMode(config: config, fs: fs, inspector: inspector, typeID: typeID, clock: clock)
+            return
+        }
+
+        // Encode mode
         let preset: String
         switch quality {
         case .standard: preset = "hevc_standard"
@@ -129,15 +166,7 @@ struct VCompress: AsyncParsableCommand {
         case .max: preset = "hevc_max"
         }
 
-        // Install signal handler
-        installSignalHandler()
-
-        // Create real implementations
-        let fs = RealFileSystem()
-        let clock = RealClock()
         let processLock = RealProcessLock()
-        let inspector = RealAssetInspector()
-        let typeID = RealFileTypeIdentifier()
         let exportFactory = RealExportSessionFactory()
 
         // Create StateManager and acquire process lock
@@ -161,7 +190,9 @@ struct VCompress: AsyncParsableCommand {
         let scanConfig = ScanConfig(
             minSize: parsedMinSize,
             fresh: fresh,
-            preset: preset
+            preset: preset,
+            ignoreTags: parsedIgnoreTags,
+            includeTags: parsedIncludeTags
         )
 
         let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
