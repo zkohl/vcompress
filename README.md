@@ -1,6 +1,6 @@
 # vcompress
 
-Batch-convert H.264 video files to HEVC (H.265) using Apple's hardware-accelerated video encoding. Preserves directory structure, file metadata (timestamps, Finder tags), and supports resumable encoding via a JSON state file.
+Batch-convert H.264 video files to HEVC (H.265) using Apple's hardware-accelerated video encoding. Also supports a copy mode for backing up or replacing files. Preserves directory structure, file metadata (timestamps, Finder tags), and supports resumable encoding via a JSON state file.
 
 ## Requirements
 
@@ -26,13 +26,17 @@ vcompress <source-dir> <dest-dir> [options]
 
 | Flag | Description |
 |------|-------------|
-| `--jobs <n>` | Parallel encode jobs, 1-64 (default: auto-detected from chip) |
+| `--mode <mode>` | Operating mode: `encode` (default) or `copy` |
+| `--jobs <n>` | Parallel jobs, 1-64 (default: auto-detected from chip) |
 | `--min-size <size>` | Skip files smaller than this, e.g. `50MB`, `1GB` |
-| `--quality <tier>` | Quality tier: `standard` (default), `high`, or `max` |
+| `--quality <tier>` | Quality tier: `standard` (default), `high`, `veryHigh`, or `max` |
+| `--ignore-tags <tags>` | Skip files with any of these Finder tags (comma-separated) |
+| `--include-tags <tags>` | Only include files with any of these Finder tags (comma-separated) |
 | `--fresh` | Ignore existing state file; re-encode all files |
-| `--dry-run` | Print the encoding plan and exit |
+| `--dry-run` | Print the plan and exit |
 | `--yes` | Skip the confirmation prompt |
 | `--verbose` | Enable verbose output |
+| `--json` | Output scan results as JSON (use with `--dry-run`) |
 
 ### Examples
 
@@ -47,15 +51,57 @@ vcompress /Volumes/Media/Raw /Volumes/Media/Compressed --quality max --min-size 
 vcompress /Volumes/Media/Raw /Volumes/Media/Compressed --dry-run
 ```
 
+## Copy Mode
+
+Use `--mode copy` to copy files from source to destination, preserving directory structure. Unlike encode mode, copy mode operates on all files — not just videos.
+
+Use cases:
+- **Backup originals** before encoding
+- **Replace originals** with compressed versions from a prior run
+
+With `--dry-run`, copy mode shows which files would be overwritten if they already exist at the destination.
+
+```bash
+# Backup originals before encoding
+vcompress /Volumes/Media/Raw /Volumes/Media/Backup --mode copy
+
+# Preview what would be copied (shows overwrite indicators)
+vcompress /Volumes/Media/Raw /Volumes/Media/Backup --mode copy --dry-run
+
+# Copy only vcompress-tagged files back to originals
+vcompress /Volumes/Media/Compressed /Volumes/Media/Raw --mode copy --include-tags "vcompress:standard"
+```
+
+## Finder Tag Filtering
+
+Filter files by macOS Finder tags using `--ignore-tags` or `--include-tags`. These work in both encode and copy modes.
+
+- `--ignore-tags tag1,tag2` — skip files that have any of the listed tags
+- `--include-tags tag1,tag2` — only include files that have any of the listed tags
+
+The two flags are mutually exclusive.
+
+```bash
+# Encode everything except files tagged "keep-original"
+vcompress /src /dst --ignore-tags "keep-original"
+
+# Only encode files tagged "needs-compress"
+vcompress /src /dst --include-tags "needs-compress"
+
+# Copy only vcompress-processed files
+vcompress /src /dst --mode copy --include-tags "vcompress:standard"
+```
+
 ## How It Works
 
 1. **Scan** the source directory for video files (`.mov`, `.mp4`, `.m4v`)
-2. **Classify** each file: skip if already HEVC, audio-only, below min-size, or already encoded
-3. **Display** a plan summary with file counts and estimated output size
-4. **Encode** files in parallel using bounded `TaskGroup` concurrency
-5. **Validate** each output (file size > 0, playable)
-6. **Copy metadata** (creation/modification dates, Finder tags) to the output
-7. **Track state** in a JSON file for crash recovery and resumable runs
+2. **Filter** by Finder tags if `--ignore-tags` or `--include-tags` is set
+3. **Classify** each file: skip if already HEVC, audio-only, below min-size, or already encoded
+4. **Display** a plan summary with file counts and estimated output size
+5. **Encode** files in parallel using bounded `TaskGroup` concurrency
+6. **Validate** each output (file size > 0, playable)
+7. **Copy metadata** (creation/modification dates, Finder tags) to the output
+8. **Track state** in a JSON file for crash recovery and resumable runs
 
 ### Supported Containers
 
@@ -71,7 +117,8 @@ vcompress /Volumes/Media/Raw /Volumes/Media/Compressed --dry-run
 |------|--------|-----------------|-------------|
 | `standard` | AVAssetExportSession (HEVCHighestQuality) | ~85–95% | Apple's built-in highest quality preset |
 | `high` | AVAssetReader/Writer (quality 0.65) | ~80–90% | Explicit quality control, good compression |
-| `max` | AVAssetReader/Writer (quality 0.75) | ~70–85% | Best quality, least compression |
+| `veryHigh` | AVAssetReader/Writer (quality 0.75) | ~70–85% | Higher quality, moderate compression |
+| `max` | AVAssetReader/Writer (quality 0.85) | ~55–80% | Best quality, least compression |
 
 ### Auto-detected Job Count
 
