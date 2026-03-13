@@ -351,12 +351,19 @@ final class ReporterTests: XCTestCase {
         let clock = makeClock()
         let reporter = Reporter(clock: clock)
         let config = makeConfig()
-        let plan = reporter.formatCopyPlan(result, config: config)
+
+        let fs = MockFileSystem()
+        // Simulate video.mp4 already existing at dest so it counts as an overwrite
+        fs.addFile(path: "/Volumes/Media/Compressed/video.mp4", size: 100)
+
+        let plan = reporter.formatCopyPlan(result, config: config, fs: fs)
 
         XCTAssert(plan.contains("vcompress copy plan"),
             "Copy plan should contain header. Got:\n\(plan)")
         XCTAssert(plan.contains("Files to copy:       2"),
             "Copy plan should show pending count. Got:\n\(plan)")
+        XCTAssert(plan.contains("Overwriting:         1"),
+            "Copy plan should show overwrite count. Got:\n\(plan)")
         XCTAssert(plan.contains("Total scanned:       6"),
             "Copy plan should show total scanned. Got:\n\(plan)")
         XCTAssert(plan.contains("Excluded by tag:"),

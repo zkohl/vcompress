@@ -199,7 +199,7 @@ public struct Reporter {
     // MARK: - Copy Mode Plan
 
     /// Formats the plan summary for copy mode.
-    public func formatCopyPlan(_ result: ScanResult, config: Config) -> String {
+    public func formatCopyPlan(_ result: ScanResult, config: Config, fs: FileSystemProvider) -> String {
         let pendingSize = result.pending.reduce(Int64(0)) { $0 + $1.fileSize }
 
         var lines: [String] = []
@@ -211,6 +211,13 @@ public struct Reporter {
 
         let pendingSizeStr = Self.formatSize(pendingSize)
         lines.append("  Files to copy:     \(String(format: "%3d", result.pending.count))   (\(pendingSizeStr))")
+
+        let overwriteCount = result.pending.filter { file in
+            fs.fileExists(atPath: config.destDir.appendingPathComponent(file.relativePath).path)
+        }.count
+        if overwriteCount > 0 {
+            lines.append("  Overwriting:       \(String(format: "%3d", overwriteCount))")
+        }
 
         let skipOrder: [(SkipReason, String)] = [
             (.excludedByTag, "Excluded by tag:"),
