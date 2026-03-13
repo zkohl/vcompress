@@ -9,6 +9,7 @@ import ArgumentParser
 public enum OperatingMode: String, CaseIterable, Codable, ExpressibleByArgument {
     case encode
     case copy
+    case backup
 }
 
 // MARK: - FileEntry

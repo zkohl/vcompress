@@ -291,6 +291,95 @@ public struct Reporter {
         return lines.joined(separator: "\n")
     }
 
+    // MARK: - Backup Mode Plan
+
+    /// Formats the plan summary for backup mode (uses encode-mode skip reasons).
+    public func formatBackupPlan(_ result: ScanResult, config: Config) -> String {
+        let pendingSize = result.pending.reduce(Int64(0)) { $0 + $1.fileSize }
+
+        var lines: [String] = []
+        lines.append("vcompress backup plan")
+        lines.append("  Source: \(config.sourceDir.path)")
+        lines.append("  Dest:   \(config.destDir.path)")
+        lines.append("  Jobs:   \(config.jobs)")
+        lines.append("")
+
+        let pendingSizeStr = Self.formatSize(pendingSize)
+        lines.append("  Files to back up:  \(String(format: "%3d", result.pending.count))   (\(pendingSizeStr))")
+
+        // Show all encode-mode skip reasons
+        let skipOrder: [(SkipReason, String)] = [
+            (.alreadyHEVC, "Already HEVC:"),
+            (.alreadyDone, "Already done:"),
+            (.tooSmall, "Below min-size:"),
+            (.alreadyEfficient, "Low bitrate:"),
+            (.noVideoTrack, "No video track:"),
+            (.notVideo, "Not video:"),
+            (.unsupportedContainer, "Unsupported:"),
+            (.excludedByTag, "Excluded by tag:"),
+            (.missingTag, "Missing tag:"),
+        ]
+        for (reason, label) in skipOrder {
+            let count = result.skipCounts[reason] ?? 0
+            if count > 0 {
+                lines.append("  \(label.padding(toLength: 18, withPad: " ", startingAt: 0))\(String(format: "%4d", count))")
+            }
+        }
+
+        let separator = String(repeating: "\u{2500}", count: 33)
+        lines.append("  \(separator)")
+        lines.append("  Total scanned:     \(String(format: "%3d", result.totalScanned))")
+
+        return lines.joined(separator: "\n")
+    }
+
+    /// Formats the per-file listing for backup mode.
+    public func formatBackupFileList(_ files: [ScannedFile], fs: FileSystemProvider, destDir: URL) -> String {
+        guard !files.isEmpty else { return "" }
+
+        var lines: [String] = []
+        for file in files {
+            let size = Self.formatSize(file.fileSize)
+            let meta = Self.formatTrackMeta(file.trackInfo)
+            switch file.classification {
+            case .pending:
+                let destPath = destDir.appendingPathComponent(file.relativePath).path
+                let exists = fs.fileExists(atPath: destPath)
+                let suffix = exists ? "  (overwrite)" : ""
+                lines.append("  backup  \(file.relativePath)  \(size)\(meta)\(suffix)")
+            case .skipped(let reason):
+                if reason == .notVideo { continue }
+                let reasonLabel = Self.skipReasonLabel(reason)
+                lines.append("  skip    \(file.relativePath)  \(size)\(meta)  (\(reasonLabel))")
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Formats the completion summary for backup mode.
+    public func formatBackupSummary(
+        copied: Int,
+        skipped: Int,
+        failed: Int,
+        totalSize: Int64,
+        overwrittenCount: Int,
+        wallTime: TimeInterval
+    ) -> String {
+        var lines: [String] = []
+        lines.append("vcompress backup complete")
+        lines.append("  Backed up:   \(String(format: "%5d", copied)) files")
+        if overwrittenCount > 0 {
+            lines.append("  Overwritten: \(String(format: "%5d", overwrittenCount)) files")
+        }
+        lines.append("  Skipped:     \(String(format: "%5d", skipped)) files")
+        lines.append("  Failed:      \(String(format: "%5d", failed)) files")
+        lines.append("")
+        lines.append("  Total size:  \(Self.formatSize(totalSize))")
+        lines.append("  Wall time:   \(Self.formatTime(wallTime))")
+
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: - Encoding Start Line
 
     /// Formats a line printed when a file begins encoding.

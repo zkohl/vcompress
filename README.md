@@ -26,7 +26,7 @@ vcompress <source-dir> <dest-dir> [options]
 
 | Flag | Description |
 |------|-------------|
-| `--mode <mode>` | Operating mode: `encode` (default) or `copy` |
+| `--mode <mode>` | Operating mode: `encode` (default), `copy`, or `backup` |
 | `--jobs <n>` | Parallel jobs, 1-64 (default: auto-detected from chip) |
 | `--min-size <size>` | Skip files smaller than this, e.g. `50MB`, `1GB` |
 | `--quality <tier>` | Quality tier: `standard` (default), `high`, `veryHigh`, or `max` |
@@ -72,9 +72,28 @@ vcompress /Volumes/Media/Raw /Volumes/Media/Backup --mode copy --dry-run
 vcompress /Volumes/Media/Compressed /Volumes/Media/Raw --mode copy --include-tags "vcompress:standard"
 ```
 
+## Backup Mode
+
+Use `--mode backup` to copy only files that would be encoded — videos that pass all encode-mode filters (supported container, not already HEVC, not already efficiently compressed, above min-size, etc.). Non-video files and already-compressed videos are excluded.
+
+Use cases:
+- **Preserve originals** before encoding, without copying the entire directory
+- **Selective backup** of only the files that will change
+
+```bash
+# Back up only the files that would be encoded
+vcompress /Volumes/Media/Raw /Volumes/Media/Backup --mode backup
+
+# Preview which files would be backed up
+vcompress /Volumes/Media/Raw /Volumes/Media/Backup --mode backup --dry-run
+
+# Back up only tagged files that would be encoded
+vcompress /Volumes/Media/Raw /Volumes/Media/Backup --mode backup --include-tags "needs-compress"
+```
+
 ## Finder Tag Filtering
 
-Filter files by macOS Finder tags using `--ignore-tags` or `--include-tags`. These work in both encode and copy modes.
+Filter files by macOS Finder tags using `--ignore-tags` or `--include-tags`. These work in all modes (encode, copy, and backup).
 
 - `--ignore-tags tag1,tag2` — skip files that have any of the listed tags
 - `--include-tags tag1,tag2` — only include files that have any of the listed tags
