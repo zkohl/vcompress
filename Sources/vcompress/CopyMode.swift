@@ -133,6 +133,162 @@ func runCopyMode(config: Config, fs: FileSystemProvider, inspector: AssetInspect
     }
 }
 
+/// Runs backup mode: uses encode-mode scanning to identify files that would be encoded,
+/// then copies only those files from source to destination.
+func runBackupMode(config: Config, fs: FileSystemProvider, inspector: AssetInspector, typeID: FileTypeIdentifier, clock: Clock) async throws {
+    let scanner = Scanner(fs: fs, inspector: inspector, typeID: typeID)
+
+    let preset: String
+    switch config.quality {
+    case .standard: preset = "hevc_standard"
+    case .high: preset = "hevc_high"
+    case .veryHigh: preset = "hevc_very_high"
+    case .max: preset = "hevc_max"
+    }
+
+    let scanConfig = ScanConfig(
+        minSize: config.minSize,
+        fresh: config.fresh,
+        preset: preset,
+        ignoreTags: config.ignoreTags,
+        includeTags: config.includeTags
+    )
+
+    // Read state file directly (no process lock needed for backup)
+    let state: StateFile?
+    if config.fresh {
+        state = nil
+    } else {
+        let stateURL = config.destDir.appendingPathComponent(".vcompress-state.json")
+        if let data = fs.contents(atPath: stateURL.path) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            state = try? decoder.decode(StateFile.self, from: data)
+        } else {
+            state = nil
+        }
+    }
+
+    let scanResult = try await scanner.scan(
+        source: config.sourceDir,
+        dest: config.destDir,
+        config: scanConfig,
+        state: state
+    )
+
+    let reporter = Reporter(clock: clock)
+
+    // Print plan
+    let plan = reporter.formatBackupPlan(scanResult, config: config)
+    print(plan)
+
+    // Print per-file listing
+    let fileList = reporter.formatBackupFileList(scanResult.allFiles, fs: fs, destDir: config.destDir)
+    if !fileList.isEmpty {
+        print("")
+        print(fileList)
+    }
+
+    // Check disk space
+    if let availableSpace = try? fs.availableSpace(atPath: config.destDir.path) {
+        let totalSize = scanResult.pending.reduce(Int64(0)) { $0 + $1.fileSize }
+        if availableSpace < totalSize {
+            print("\n  \u{26a0} Warning: Available disk space (\(Reporter.formatSize(availableSpace))) may be insufficient.")
+            print("    Total backup size: \(Reporter.formatSize(totalSize)).")
+        }
+    }
+
+    // Dry run: exit now
+    if config.dryRun {
+        return
+    }
+
+    // No files to back up
+    if scanResult.pending.isEmpty {
+        print("\nNo files to back up.")
+        return
+    }
+
+    // Confirmation gate
+    if !config.yes {
+        print("\nPress Enter to start backup, or Ctrl-C to cancel...")
+        _ = readLine()
+    }
+
+    // Check for shutdown after confirmation
+    if ShutdownCoordinator.shared.isShutdownRequested {
+        throw ExitCode(130)
+    }
+
+    let pendingFiles = scanResult.pending
+    let totalFiles = pendingFiles.count
+    let totalSkipped = scanResult.skipCounts.values.reduce(0, +)
+    let tracker = CopyTracker()
+    let startTime = Date()
+
+    print("\nBacking up \(totalFiles) file\(totalFiles == 1 ? "" : "s") with \(config.jobs) parallel job\(config.jobs == 1 ? "" : "s")...\n")
+
+    // Bounded TaskGroup copy loop (reuses copyFile from copy mode)
+    await withTaskGroup(of: Void.self) { group in
+        var iterator = pendingFiles.makeIterator()
+
+        for _ in 0..<config.jobs {
+            guard let entry = iterator.next() else { break }
+            group.addTask {
+                await copyFile(
+                    entry: entry,
+                    fs: fs,
+                    tracker: tracker,
+                    reporter: reporter,
+                    totalFiles: totalFiles,
+                    verbose: config.verbose
+                )
+            }
+        }
+
+        for await _ in group {
+            if ShutdownCoordinator.shared.isShutdownRequested {
+                break
+            }
+
+            guard let entry = iterator.next() else { continue }
+            group.addTask {
+                await copyFile(
+                    entry: entry,
+                    fs: fs,
+                    tracker: tracker,
+                    reporter: reporter,
+                    totalFiles: totalFiles,
+                    verbose: config.verbose
+                )
+            }
+        }
+    }
+
+    let wallTime = Date().timeIntervalSince(startTime)
+
+    let copiedCount = await tracker.copiedCount
+    let failedCount = await tracker.failedCount
+    let totalSize = await tracker.totalSize
+    let overwrittenCount = await tracker.overwrittenCount
+
+    let summary = reporter.formatBackupSummary(
+        copied: copiedCount,
+        skipped: totalSkipped,
+        failed: failedCount,
+        totalSize: totalSize,
+        overwrittenCount: overwrittenCount,
+        wallTime: wallTime
+    )
+    print("\n\(summary)")
+
+    if ShutdownCoordinator.shared.isShutdownRequested {
+        throw ExitCode(130)
+    } else if failedCount > 0 {
+        throw ExitCode(1)
+    }
+}
+
 /// Copy a single file from source to destination.
 /// Errors never escape this function.
 private func copyFile(

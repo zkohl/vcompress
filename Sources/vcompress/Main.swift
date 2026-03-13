@@ -17,7 +17,7 @@ struct VCompress: AsyncParsableCommand {
     @Argument(help: "Destination directory for encoded output.")
     var destDir: String
 
-    @Option(name: .long, help: "Operating mode: encode (default) or copy.")
+    @Option(name: .long, help: "Operating mode: encode (default), copy, or backup.")
     var mode: OperatingMode = .encode
 
     @Option(name: .long, help: "Parallel encode jobs (default: auto).")
@@ -154,6 +154,11 @@ struct VCompress: AsyncParsableCommand {
         // Branch by mode
         if config.mode == .copy {
             try await runCopyMode(config: config, fs: fs, inspector: inspector, typeID: typeID, clock: clock)
+            return
+        }
+
+        if config.mode == .backup {
+            try await runBackupMode(config: config, fs: fs, inspector: inspector, typeID: typeID, clock: clock)
             return
         }
 
