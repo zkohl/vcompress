@@ -18,7 +18,7 @@ func runCopyMode(config: Config, fs: FileSystemProvider, inspector: AssetInspect
     let reporter = Reporter(clock: clock)
 
     // Print plan
-    let plan = reporter.formatCopyPlan(scanResult, config: config)
+    let plan = reporter.formatCopyPlan(scanResult, config: config, fs: fs)
     print(plan)
 
     // Print per-file listing
